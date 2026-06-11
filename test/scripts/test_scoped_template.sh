@@ -32,4 +32,12 @@ out="$(st '["A"]')"
 assert_contains "A.lint declared"      "${out}" "lint"
 assert_contains "A.unit-test declared" "${out}" "unit-test"
 
+echo "## all three in scope: trail-level merged in exactly once, every artifact present"
+out="$(st '["A","B","C"]')"
+count="$(printf '%s\n' "${out}" | grep -c 'name: pull-request' || true)"
+assert_equals     "trail-level pull-request appears exactly once" "${count}" "1"
+assert_contains   "artifact A present" "${out}" "- name: A"
+assert_contains   "artifact B present" "${out}" "- name: B"
+assert_contains   "artifact C present" "${out}" "- name: C"
+
 finish

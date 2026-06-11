@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """Compose a Kosli flow template scoped to the components that changed.
 
-The scoped template is the shared trail-level skeleton (kosli/trail.yml) with one
-artifact entry appended per changed component, loaded from source/<name>/kosli.yml.
-Components that did not change are absent from the result, so the trail's
-compliance covers exactly what this commit should have built -- never more, and
-(crucially) never less.
+The output merges two sources:
 
-This is a strict subset of the per-component fragments: each component's required
-attestations are defined once, in that component's own fragment, and only ever
-filtered here -- never re-authored.
+  * kosli/trail.yml -- the shared skeleton holding the TRAIL-LEVEL attestations
+    that apply to every commit (e.g. pull-request), declared once here; and
+  * source/<name>/kosli.yml -- one artifact fragment per CHANGED component,
+    each appended to the skeleton's trail.artifacts list.
+
+So the trail-level attestations are NOT repeated in the per-component fragments:
+they live once in kosli/trail.yml and are merged in here. Components that did not
+change are absent from the result, so the trail's compliance covers exactly what
+this commit should have built -- never more, and (crucially) never less.
+
+The output is a strict subset of those inputs: each component's required
+attestations are defined once, in that component's own fragment (and the
+trail-level ones once in the skeleton), and only ever filtered/assembled here --
+never re-authored.
 
 Usage:
   bin/scoped-template '["A","B"]'
