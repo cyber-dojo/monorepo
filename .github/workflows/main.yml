@@ -1,0 +1,109 @@
+# Orchestrator for the cyber-dojo monorepo.
+#
+# One always-on `scope` job decides which components changed, composes a Kosli
+# trail template scoped to exactly those components, and opens the trail. It then
+# calls each in-scope component's own reusable workflow. A final `gate` job ties
+# the whole commit's compliance together with a single `kosli evaluate trail`.
+#
+# The full design and the reasoning behind every choice are in ../../docs/.
+name: monorepo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  KOSLI_ORG: cyber-dojo
+  KOSLI_FLOW: monorepo
+
+jobs:
+  # Always runs (no path filter). This is the single oracle: only a job that runs
+  # on every commit can notice that a component which SHOULD have built did not.
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      components: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # history is needed so the path filter can diff
+
+      # "Which components exist" and "how a change is detected" both come from the
+      # presence of source/<X>/kosli.yml -- one source of truth, no drift.
+      - name: Generate path filters from the component fragments
+        run: bin/gen-filters > .github/filters.generated.yml
+
+      - name: Detect changed components
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: .github/filters.generated.yml
+
+      # Compose the per-commit template (subset of the fragments) and open the
+      # trail with it. The trail's compliance is now scoped to this commit.
+      - name: Compose scoped template and open the trail
+        if: ${{ steps.filter.outputs.changes != '[]' }}
+        env:
+          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+        run: |
+          python3 -m pip install --quiet pyyaml
+          bin/scoped-template '${{ steps.filter.outputs.changes }}' > scoped-template.yml
+          echo "----- scoped template for this commit -----"
+          cat scoped-template.yml
+          kosli begin trail "$GITHUB_SHA" \
+            --flow "$KOSLI_FLOW" \
+            --org "$KOSLI_ORG" \
+            --template-file scoped-template.yml
+
+  # One caller job per component, each guarded by the scope output. A matrix is
+  # NOT used here on purpose: A, B and C have genuinely different pipelines, so
+  # each gets its own reusable workflow.
+  build-A:
+    needs: scope
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
+    uses: ./.github/workflows/a.yml
+    with:
+      trail: ${{ github.sha }}
+      flow: monorepo
+    secrets: inherit
+
+  build-B:
+    needs: scope
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'B') }}
+    uses: ./.github/workflows/b.yml
+    with:
+      trail: ${{ github.sha }}
+      flow: monorepo
+    secrets: inherit
+
+  build-C:
+    needs: scope
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'C') }}
+    uses: ./.github/workflows/c.yml
+    with:
+      trail: ${{ github.sha }}
+      flow: monorepo
+    secrets: inherit
+
+  # The synchronization barrier is `needs` here, not anything in Kosli (Kosli has
+  # no wait/poll primitive). `!cancelled()` ensures a skipped or failed component
+  # never silently skips the gate -- the gate then judges the trail as it is.
+  gate:
+    needs: [scope, build-A, build-B, build-C]
+    if: ${{ !cancelled() && needs.scope.outputs.components != '[]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tie A/B/C compliance together for this commit
+        env:
+          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+        run: |
+          kosli evaluate trail "$GITHUB_SHA" \
+            --flow "$KOSLI_FLOW" \
+            --org "$KOSLI_ORG" \
+            --policy policy/gate.rego \
+            --assert        # exit non-zero on deny; explicit because the default will flip in future

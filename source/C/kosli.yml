@@ -1,0 +1,5 @@
+# Component C's template fragment. A third shape again (Go), with just unit tests.
+# Same contract: C's workflow attests these as C.<name>.
+name: C
+attestations:
+  - { name: unit-test, type: junit }

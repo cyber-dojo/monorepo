@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Compose a Kosli flow template scoped to the components that changed.
+
+The scoped template is the shared trail-level skeleton (kosli/trail.yml) with one
+artifact entry appended per changed component, loaded from source/<name>/kosli.yml.
+Components that did not change are absent from the result, so the trail's
+compliance covers exactly what this commit should have built -- never more, and
+(crucially) never less.
+
+This is a strict subset of the per-component fragments: each component's required
+attestations are defined once, in that component's own fragment, and only ever
+filtered here -- never re-authored.
+
+Usage:
+  bin/scoped-template '["A","B"]'
+  bin/scoped-template --repo-root . '["A","B"]'
+
+Options:
+  -h, --help       Show this help and exit.
+  --repo-root DIR  Repo root containing kosli/ and source/ (default: current dir).
+
+Example:
+  bin/scoped-template '["A","B"]' > scoped-template.yml
+"""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import yaml
+
+
+def load_skeleton(repo_root):
+    """Load and return the shared trail-level template skeleton as a dict."""
+    path = repo_root / "kosli" / "trail.yml"
+    with path.open() as handle:
+        skeleton = yaml.safe_load(handle)
+    skeleton.setdefault("trail", {}).setdefault("artifacts", [])
+    return skeleton
+
+
+def load_fragment(repo_root, component):
+    """Load and return one component's artifact fragment as a dict."""
+    path = repo_root / "source" / component / "kosli.yml"
+    if not path.is_file():
+        raise SystemExit(f"no template fragment for component {component!r}: {path}")
+    with path.open() as handle:
+        return yaml.safe_load(handle)
+
+
+def compose(repo_root, components):
+    """Return the trail skeleton with each changed component's fragment appended."""
+    template = load_skeleton(repo_root)
+    for component in components:
+        template["trail"]["artifacts"].append(load_fragment(repo_root, component))
+    return template
+
+
+def parse_args(argv):
+    """Parse command-line arguments and return the populated namespace."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repo root containing kosli/ and source/ (default: current dir).",
+    )
+    parser.add_argument(
+        "changed",
+        help='JSON array of changed component names, e.g. \'["A","B"]\'.',
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv):
+    """Entry point: compose the scoped template and write YAML to stdout."""
+    args = parse_args(argv)
+    components = json.loads(args.changed)
+    template = compose(Path(args.repo_root), components)
+    yaml.safe_dump(template, sys.stdout, sort_keys=False)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

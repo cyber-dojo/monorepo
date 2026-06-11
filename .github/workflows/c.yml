@@ -1,0 +1,38 @@
+# Component C's pipeline (Go). The simplest of the three; same contract again.
+name: C
+
+on:
+  workflow_call:
+    inputs:
+      trail: { required: true, type: string }
+      flow:  { required: true, type: string }
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KOSLI_ORG: cyber-dojo
+      KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+      KOSLI_FLOW: ${{ inputs.flow }}
+      KOSLI_TRAIL: ${{ inputs.trail }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: source/C/build.sh build
+      - name: Unit test
+        run: source/C/build.sh unit-test
+      - name: Package artifact
+        run: source/C/build.sh image
+
+      - name: Report artifact C
+        run: kosli attest artifact source/C/dist/C.tar --artifact-type file --name C
+
+      - name: Attest C.unit-test
+        run: kosli attest junit --name C.unit-test --results-dir source/C/reports
+
+      - name: C self-check
+        run: kosli assert artifact source/C/dist/C.tar --artifact-type file --flow "$KOSLI_FLOW"

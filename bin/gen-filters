@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Generate the dorny/paths-filter `filters:` YAML from the component fragments.
+
+A directory under source/ is a component if and only if it contains a kosli.yml
+fragment. Each component X is mapped to the path filter 'source/X/**'. This keeps
+two things derived from one fact -- the presence of the fragment file:
+
+  * which components exist, and
+  * how a change to a component is detected.
+
+There is no second list of components to drift out of sync with the first.
+
+Usage:
+  bin/gen-filters
+  bin/gen-filters --repo-root .
+
+Options:
+  -h, --help       Show this help and exit.
+  --repo-root DIR  Repo root containing source/ (default: current dir).
+
+Example:
+  bin/gen-filters > .github/filters.generated.yml
+"""
+import argparse
+import sys
+from pathlib import Path
+
+
+def discover_components(repo_root):
+    """Return sorted component names: dirs under source/ that hold a kosli.yml."""
+    source = repo_root / "source"
+    names = []
+    for child in sorted(source.iterdir()):
+        if child.is_dir() and (child / "kosli.yml").is_file():
+            names.append(child.name)
+    return names
+
+
+def render_filters(components):
+    """Return dorny/paths-filter YAML mapping each component to its path glob."""
+    lines = [f"{name}: ['source/{name}/**']" for name in components]
+    return "\n".join(lines) + "\n"
+
+
+def parse_args(argv):
+    """Parse command-line arguments and return the populated namespace."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repo root containing source/ (default: current dir).",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv):
+    """Entry point: discover components and write the filters YAML to stdout."""
+    args = parse_args(argv)
+    components = discover_components(Path(args.repo_root))
+    sys.stdout.write(render_filters(components))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,53 @@
+# Component A's pipeline (Python). Reusable: invoked by main.yml only for commits
+# that change source/A/**. It attests A's artifact and A's evidence into the
+# SHARED trail identified by `trail` (the commit SHA), under the artifact name "A".
+#
+# Think of this as "A's main.yml": if A lived in its own repo, this is what would
+# run on push. The only monorepo-specific changes are `on: workflow_call` instead
+# of `on: push`, and receiving the shared trail id as an input.
+name: A
+
+on:
+  workflow_call:
+    inputs:
+      trail: { required: true, type: string }
+      flow:  { required: true, type: string }
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KOSLI_ORG: cyber-dojo
+      KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+      KOSLI_FLOW: ${{ inputs.flow }}
+      KOSLI_TRAIL: ${{ inputs.trail }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- A's own bespoke build/test (nothing like B or C) ----
+      - name: Build
+        run: source/A/build.sh build
+      - name: Unit test
+        run: source/A/build.sh unit-test
+      - name: Lint
+        run: source/A/build.sh lint
+      - name: Package artifact
+        run: source/A/build.sh image
+
+      # ---- report A's artifact into the shared trail, named "A" ----
+      - name: Report artifact A
+        run: kosli attest artifact source/A/dist/A.tar --artifact-type file --name A
+
+      # ---- A's attestations: names match the A.* entries in source/A/kosli.yml ----
+      - name: Attest A.unit-test
+        run: kosli attest junit --name A.unit-test --results-dir source/A/reports
+      - name: Attest A.lint
+        run: kosli attest generic --name A.lint --compliant=true --user-data source/A/reports/lint.json
+
+      # ---- A's OWN early gate: A's artifact only, never the whole trail ----
+      # Safe to run here because A's own attestations are complete within A's run.
+      - name: A self-check
+        run: kosli assert artifact source/A/dist/A.tar --artifact-type file --flow "$KOSLI_FLOW"

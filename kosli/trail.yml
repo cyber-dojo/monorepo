@@ -1,0 +1,13 @@
+# Shared trail-level skeleton.
+#
+# This is the part of the Kosli flow template that applies to EVERY commit,
+# regardless of which components changed. `bin/scoped-template` starts from this
+# file and appends one artifact fragment per changed component.
+#
+# Trail-level attestations (here: pull-request) are produced once per trail and
+# apply to the whole commit, not to a single artifact.
+version: 1
+trail:
+  attestations:
+    - { name: pull-request, type: pull_request }
+  artifacts: []   # filled in, per commit, by the union of in-scope fragments

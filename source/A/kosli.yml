@@ -1,0 +1,11 @@
+# Component A's template fragment (one entry of trail.artifacts).
+#
+# Owned by A, co-located with A's code, covered by A's path filter (source/A/**).
+# Editing this file changes only source/A/**, so only A rebuilds.
+#
+# The attestation NAMES here are the contract: A's workflow must attest exactly
+# these (as A.<name>). A mismatch shows up as MISSING -> non-compliant (fail-closed).
+name: A
+attestations:
+  - { name: lint,      type: generic }
+  - { name: unit-test, type: junit }

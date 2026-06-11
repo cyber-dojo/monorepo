@@ -1,0 +1,43 @@
+# Component B's pipeline (Ruby). Same contract as A, deliberately different insides:
+# a different toolchain and a different evidence set (rubocop + container scan).
+name: B
+
+on:
+  workflow_call:
+    inputs:
+      trail: { required: true, type: string }
+      flow:  { required: true, type: string }
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KOSLI_ORG: cyber-dojo
+      KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+      KOSLI_FLOW: ${{ inputs.flow }}
+      KOSLI_TRAIL: ${{ inputs.trail }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: source/B/build.sh build
+      - name: Rubocop
+        run: source/B/build.sh rubocop
+      - name: Snyk container scan
+        run: source/B/build.sh snyk-scan
+      - name: Package artifact
+        run: source/B/build.sh image
+
+      - name: Report artifact B
+        run: kosli attest artifact source/B/dist/B.tar --artifact-type file --name B
+
+      - name: Attest B.rubocop
+        run: kosli attest junit --name B.rubocop --results-dir source/B/reports
+      - name: Attest B.snyk-container-scan
+        run: kosli attest generic --name B.snyk-container-scan --compliant=true --user-data source/B/reports/snyk.json
+
+      - name: B self-check
+        run: kosli assert artifact source/B/dist/B.tar --artifact-type file --flow "$KOSLI_FLOW"
