@@ -23,14 +23,18 @@ fast="false"
 export KOSLI_TEST_FAST="${fast}"
 
 bootstrap_up
-# Cold mode tears down at the end. Fast mode leaves containers up for the next
-# run -- safe, because the DB is emptied before every test regardless.
+# Cold mode tears down at the end. Fast mode leaves containers up for the next run.
 [ "${fast}" = "true" ] || trap 'bootstrap_down' EXIT
+
+# Reset ONCE before the whole suite. Per-test isolation then comes from each test
+# using its own dedicated flow (named after the test) and a UNIQUE artifact
+# fingerprint -- an artifact fingerprint's compliance spans flows/trails, so shared
+# fingerprints (not shared flows) are the real contamination risk.
+reset_to_empty
 
 rc=0
 for t in "${here}"/test_*.sh; do
   echo "=== ${t##*/} ==="
-  reset_to_empty            # <-- every test starts from a COMPLETELY EMPTY server
   bash "${t}" || rc=1
   echo
 done

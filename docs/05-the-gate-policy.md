@@ -6,7 +6,7 @@ turns the whole scoped trail into one allow/deny verdict.
 ## The policy
 
 ```rego
-package gate
+package policy
 import rego.v1
 
 default allow := false
@@ -36,17 +36,20 @@ violations contains msg if { ... }   # diagnostics only
 Because the template is scoped per commit (see [doc 4](04-template-fragments.md)),
 `input.trail.compliance_status.is_compliant` already means: "every artifact this
 commit should have built, plus every trail-level attestation, is present and
-compliant". We verified on 276 real cyber-dojo trails that this flag is a
-trustworthy aggregate:
+compliant". The suite proves the flag behaves that way against a fresh server:
 
-- `is_compliant == true` never coexisted with a MISSING or non-compliant expected
-  attestation (checked across 215 compliant trails: zero violations).
-- A trail was never compliant while one of its artifacts was non-compliant
-  (0 counterexamples).
+- it is `true` only when everything required is present and compliant
+  (`test/test_green_path_all_compliant.sh`,
+  `test/test_two_components_all_compliant.sh`), and
+- it is `false` when any in-scope attestation or artifact is missing or
+  non-compliant (`test/test_missing_artifact_attestation.sh`,
+  `test/test_in_scope_artifact_never_reported.sh`,
+  `test/test_failing_attestation.sh`,
+  `test/test_two_components_one_not_compliant.sh`).
 
-A MISSING expected attestation is represented explicitly (`status: "MISSING"`,
-`is_compliant: null`) and drags the trail to `INCOMPLETE` / not-compliant, so a
-component that was in scope but failed to attest cannot slip through.
+A MISSING expected attestation is represented explicitly (`status: "MISSING"`)
+and drags the trail to not-compliant, so a component that was in scope but failed
+to attest cannot slip through.
 
 ## Field shapes (confirmed against real data)
 

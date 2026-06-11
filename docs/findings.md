@@ -95,3 +95,25 @@ which were inconsistent (`tf-plan-*` left the artifact COMPLIANT while missing;
 `never-alone-*` dragged it NON-COMPLIANT). Those were created at different dates
 against different server versions -- exactly why we re-tested on a fresh server.
 The test now pins the current behaviour so a future change is caught.
+
+## Verified by the system-test suite (claim -> proving test)
+
+All against a fresh local server; each row is asserted, not assumed.
+
+- Gate ALLOWS only when the trail is genuinely compliant (positive control) ->
+  `test/test_green_path_all_compliant.sh`
+- A missing artifact-level attestation -> trail non-compliant + gate denies ->
+  `test/test_missing_artifact_attestation.sh`
+- An in-scope artifact never reported -> trail non-compliant + gate denies; and
+  it appears in `artifacts_statuses` with `status: "MISSING"` (NOT omitted) ->
+  `test/test_in_scope_artifact_never_reported.sh`. This resolves docs/06 open
+  question 1 (the trail DOES represent the unreported artifact, as MISSING).
+- A present-but-failing attestation (`--compliant=false`) -> non-compliant +
+  deny -> `test/test_failing_attestation.sh`
+- A missing trail-level attestation -> trail non-compliant + deny, and it drags
+  the artifact to non-compliant too ->
+  `test/test_artifact_compliance_when_trail_attestation_missing.sh`
+- Tie-together AND, both compliant -> whole commit compliant + gate allows ->
+  `test/test_two_components_all_compliant.sh`
+- Tie-together AND, one in-scope component non-compliant -> whole commit
+  non-compliant + gate denies -> `test/test_two_components_one_not_compliant.sh`

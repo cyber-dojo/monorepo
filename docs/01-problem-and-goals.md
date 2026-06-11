@@ -18,11 +18,16 @@ built is itself compliant** -- even though the components share no attestation.
 Concretely:
 
 - A and B changed, C did not -> the commit is compliant iff A and B are both
-  compliant. C is irrelevant to this commit.
+  compliant. C is irrelevant to this commit. (Proved both ways:
+  `test/test_two_components_all_compliant.sh`,
+  `test/test_two_components_one_not_compliant.sh`; a trail scoped to a subset is
+  compliant on its own: `test/test_green_path_all_compliant.sh`.)
 - A changed and is compliant, B changed but is missing an attestation -> the
-  commit is non-compliant, because B was in scope and is not compliant.
+  commit is non-compliant, because B was in scope and is not compliant. (Proved:
+  `test/test_two_components_one_not_compliant.sh`.)
 - A component that *should* have built but silently did not must make the commit
-  non-compliant. Silence is never success.
+  non-compliant. Silence is never success. (Proved:
+  `test/test_in_scope_artifact_never_reported.sh`.)
 
 ## The hard constraint: compliance is asymmetric
 

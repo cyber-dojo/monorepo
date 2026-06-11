@@ -42,33 +42,45 @@ filter).
 
 ## Trust the trail-level flag, not a single artifact's flag
 
-Verified on real data: a trail is never compliant while an artifact is
-non-compliant, but an artifact can be green while the trail is red (a missing
-trail-level attestation). So the gate asserts the **trail-level**
-`is_compliant`, which is the complete aggregate. A per-artifact check alone could
-miss a missing trail-level attestation.
+The gate asserts the **trail-level** `is_compliant` because it is the complete
+aggregate -- it covers every trail-level attestation plus every artifact. A
+single artifact's flag does not represent the whole commit, and the
+artifact<->trail-level relationship is attestation-dependent: on the current
+server a missing trail-level attestation drags the artifact non-compliant
+(`test/test_artifact_compliance_when_trail_attestation_missing.sh`), whereas
+older production trails behaved inconsistently (see [findings](findings.md)).
+Gating on the aggregate sidesteps that entirely.
 
 ## Fail-closed behaviours, collected
 
 - `gate` runs under `!cancelled()`, so a skipped or failed component cannot
-  silently skip the gate.
+  silently skip the gate. (CI-orchestration behaviour; not covered by the CLI
+  system tests -- see Coverage gaps below.)
 - The Rego defaults to deny and proves compliance positively, so a renamed/absent
-  field denies rather than passes.
+  field denies rather than passes. (Source-level argument only; not system-tested,
+  since proving it needs a fabricated policy input, which the tests forbid.)
 - A naming drift between a fragment and its workflow surfaces as MISSING ->
-  non-compliant.
+  non-compliant -- the same mechanism as a missing attestation
+  (`test/test_missing_artifact_attestation.sh`).
 - A missing expected attestation is explicit (`MISSING`) and makes the trail
-  non-compliant.
+  non-compliant. Proved: `test/test_missing_artifact_attestation.sh`,
+  `test/test_in_scope_artifact_never_reported.sh`,
+  `test/test_artifact_compliance_when_trail_attestation_missing.sh`.
 
-## Open questions to confirm in your environment
+## Resolved against a fresh server
 
-The design rests on behaviours we verified against cyber-dojo's real trails, but
-two are worth re-confirming on your own instance before relying on them:
+1. An expected-but-unreported artifact is NOT omitted from `artifacts_statuses`;
+   it is listed with `status: "MISSING"` and the trail is non-compliant. Proved:
+   `test/test_in_scope_artifact_never_reported.sh`.
+2. A missing expected attestation renders the trail non-compliant. Proved:
+   `test/test_missing_artifact_attestation.sh`,
+   `test/test_artifact_compliance_when_trail_attestation_missing.sh`.
 
-1. That `artifacts_statuses` omits expected-but-unreported artifacts (so absence
-   is what scoping, not the trail, must account for).
-2. That a missing expected attestation always renders the trail `is_compliant:
-   false` (it did in every one of the 215 compliant trails we checked).
+## Coverage gaps (not exercised by the CLI system tests)
 
-Both are directly observable with `kosli evaluate trail --show-input --output
-json` (see [doc 5](05-the-gate-policy.md)). The asymmetry rule says: until
-confirmed, prefer the stricter interpretation.
+- CI orchestration (doc 3): `needs`, `if: !cancelled()`, conditional dispatch,
+  the always-on scope job, scope-from-an-oracle, over-inclusion. These are GitHub
+  Actions semantics and would need an Actions-level harness (e.g. `act`).
+- The Rego "renamed/absent field -> deny" fail-safe: only demonstrable with a
+  fabricated policy input, which our tests forbid, so it stays a source-level
+  argument (the policy's `== true` structure).

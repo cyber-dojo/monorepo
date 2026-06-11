@@ -15,8 +15,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "${here}/.." && pwd)"
 source "${here}/lib.sh"
 
-suffix="${GITHUB_RUN_NUMBER:-$$}"
-flow="trail-miss-${suffix}"
+flow="$(basename "$0" .sh | tr '_' '-')"   # dedicated flow named after this test
 work="${_tmpdir}/work"
 mkdir -p "${work}/reports"
 
@@ -37,7 +36,7 @@ commit_git_flags=(--repo-root "${repo}" --commit "${sha}")
 # Dogfood the real monorepo template: trail-level pull-request + artifact
 # A{lint, unit-test}.
 "${root}/bin/scoped-template" --repo-root "${root}" '["A"]' > "${work}/template.yml"
-printf 'artifact A\n' > "${work}/A.bin"
+printf 'artifact A for %s\n' "${flow}" > "${work}/A.bin"   # unique fingerprint per test
 printf '%s\n' \
   '<?xml version="1.0" encoding="UTF-8"?>' \
   '<testsuite name="A" tests="1" failures="0" errors="0">' \

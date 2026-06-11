@@ -64,6 +64,18 @@ make_commit() {
   git -C "${repo}" rev-parse HEAD
 }
 
+# Write a passing junit report (one passing testcase) into directory $1, for use
+# as the --results-dir input to `kosli attest junit`.
+write_junit() {
+  local dir="$1"
+  mkdir -p "${dir}"
+  printf '%s\n' \
+    '<?xml version="1.0" encoding="UTF-8"?>' \
+    '<testsuite name="t" tests="1" failures="0" errors="0">' \
+    '  <testcase classname="t" name="smoke"/>' \
+    '</testsuite>' > "${dir}/junit.xml"
+}
+
 # Print summary and set the exit status (0 only if every check passed).
 finish() {
   echo

@@ -1,10 +1,11 @@
 # Bring up / reset a local Kosli server so each test starts from a COMPLETELY
 # EMPTY server -- the same idea as the server's `make demo`, minus the bulk data.
 #
-# Isolation is an enforced invariant, not an option: reset_to_empty() runs before
-# every test (see run.sh) and wipes the database, so no leftover flow/trail/org
-# state from a previous test or run can change behaviour. Kosli aggregates
-# compliance across flows/trails for a fingerprint, so a dirty DB really can.
+# Isolation model: the suite resets the server to empty ONCE (run.sh calls
+# reset_to_empty before the loop). Per-test isolation then comes from each test
+# using its own flow (named after the test) and a UNIQUE artifact fingerprint --
+# a fingerprint's compliance spans flows/trails, so shared fingerprints (not
+# shared flows) are the contamination risk.
 #
 # It reuses the server repo's own targets and in-container init scripts (running
 # them, never editing that repo). The only values copied out of kosli-dev/server:
@@ -36,14 +37,14 @@ bootstrap_up() {
   [ -d "${SERVER_REPO}" ] || { echo "server repo not found: set SERVER_REPO" >&2; return 1; }
   _resolve_env
   if [ "${KOSLI_TEST_FAST:-false}" = "true" ] && _server_running; then
-    echo "bootstrap: reusing running demo server (fast mode); DB still emptied per test"
+    echo "bootstrap: reusing running demo server (fast mode); DB reset once before the suite"
   else
     make -C "${SERVER_REPO}" demo_empty
   fi
 }
 
-# Enforced before EVERY test: drop all data, then recreate the minimal
-# scaffolding (org owner users + test-organization). This is the empty baseline.
+# Reset the server to empty (drop all data) and recreate the minimal scaffolding
+# (org owner users + test-organization). Called ONCE before the suite.
 reset_to_empty() {
   docker exec "${CONTAINER}" sh -c "/demo/init/clear_db.py"
   docker exec "${CONTAINER}" /demo/init/create_dev_users.py descope "${CI:-}"
