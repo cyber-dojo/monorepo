@@ -1,7 +1,10 @@
 # System-test helpers, in the style of kosli-dev/server's test/system: a
-# kosli_cli wrapper that runs the REAL CLI and captures its streams, plus small
-# assertions. CLI only -- every asserted value must come from a real CLI
-# response (e.g. `kosli get trail --output json`), never from fabricated JSON.
+# kosli_cli wrapper that runs the REAL CLI and captures its streams, plus the
+# shared assertions from assert.sh. CLI only -- every asserted value must come
+# from a real CLI response (e.g. `kosli get trail --output json`), never from
+# fabricated JSON.
+
+source "$(dirname "${BASH_SOURCE[0]}")/assert.sh"
 
 : "${KOSLI_HOST:?bootstrap must export KOSLI_HOST}"
 : "${KOSLI_ORG:?bootstrap must export KOSLI_ORG}"
@@ -17,15 +20,12 @@ _tmpdir="$(mktemp -d)"
 _out="${_tmpdir}/out"
 _err="${_tmpdir}/err"
 _status=0
-_checks=0
-_fails=0
 trap 'rm -rf "${_tmpdir}"' EXIT
 
-# Single definition of how the CLI is invoked, so its streams can be captured
-# for the assertions below. Always exits 0 itself; the real status is in $_status.
+# Single definition of how the CLI is invoked, so its streams can be captured for
+# the assertions. `|| _status=$?` keeps a non-zero CLI exit from tripping the
+# caller's `set -e` so an assertion can inspect it instead of the script aborting.
 kosli_cli() {
-  # `|| _status=$?` keeps a non-zero CLI exit from tripping the caller's `set -e`
-  # so the assertions below can inspect it instead of the script aborting.
   _status=0
   kosli --max-api-retries=0 --host "${KOSLI_HOST}" --org "${KOSLI_ORG}" "$@" >"${_out}" 2>"${_err}" || _status=$?
   return 0
@@ -34,16 +34,17 @@ kosli_cli() {
 # Evaluate a jq expression against the LAST captured stdout (real CLI JSON only).
 json() { jq -r "$1" "${_out}"; }
 
-_pass() { echo "  ok   - $1"; }
-_fail() {
-  _fails=$((_fails + 1))
-  echo "  FAIL - $1"
-  [ -s "${_err}" ] && sed 's/^/         stderr: /' "${_err}" | head -5
+_dump_err() { [ -s "${_err}" ] && sed 's/^/         stderr: /' "${_err}" | head -5 || true; }
+
+assert_exit_zero() {
+  _checks=$((_checks + 1))
+  if [ "${_status}" -eq 0 ]; then _pass "$1"; else _fail "$1 (expected exit 0, got ${_status})"; _dump_err; fi
 }
 
-assert_exit_zero()    { _checks=$((_checks + 1)); [ "${_status}" -eq 0 ] && _pass "$1" || _fail "$1 (expected exit 0, got ${_status})"; }
-assert_exit_nonzero() { _checks=$((_checks + 1)); [ "${_status}" -ne 0 ] && _pass "$1" || _fail "$1 (expected non-zero exit, got 0)"; }
-assert_equals()       { _checks=$((_checks + 1)); [ "$2" = "$3" ] && _pass "$1 ($2)" || _fail "$1 (expected '$3', got '$2')"; }
+assert_exit_nonzero() {
+  _checks=$((_checks + 1))
+  if [ "${_status}" -ne 0 ]; then _pass "$1"; else _fail "$1 (expected non-zero exit, got 0)"; fi
+}
 
 # Create (if needed) a controlled, disposable git repo at $1 and add one commit
 # with message $2; echo the new commit SHA. This is how a test fully controls the
@@ -74,11 +75,4 @@ write_junit() {
     '<testsuite name="t" tests="1" failures="0" errors="0">' \
     '  <testcase classname="t" name="smoke"/>' \
     '</testsuite>' > "${dir}/junit.xml"
-}
-
-# Print summary and set the exit status (0 only if every check passed).
-finish() {
-  echo
-  echo "${_checks} checks, ${_fails} failed"
-  [ "${_fails}" -eq 0 ]
 }

@@ -117,3 +117,15 @@ All against a fresh local server; each row is asserted, not assumed.
   `test/test_two_components_all_compliant.sh`
 - Tie-together AND, one in-scope component non-compliant -> whole commit
   non-compliant + gate denies -> `test/test_two_components_one_not_compliant.sh`
+- An UNEXPECTED attestation (not in the template) is flagged `unexpected: true`,
+  but if it is non-compliant it STILL makes the trail non-compliant. "Unexpected"
+  means "not required", NOT "ignored": a known-bad ad-hoc attestation cannot be
+  sneaked past the gate. (A *compliant* unexpected attestation -- e.g. historical
+  provenance/sbom -- does not affect compliance.) Fail-closed, the safe direction.
+  Proved: `test/test_unexpected_attestation.sh`
+
+Server-free generator tests (no server needed):
+- `bin/scoped-template` composes a strict subset of the fragments (trail-level
+  always; exactly the changed components' artifacts) -> `test/scripts/test_scoped_template.sh`
+- `bin/gen-filters` derives `X: ['source/X/**']` from each fragment file ->
+  `test/scripts/test_gen_filters.sh`
