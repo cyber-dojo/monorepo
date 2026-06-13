@@ -17,7 +17,8 @@ permissions:
   contents: read
 
 env:
-  KOSLI_ORG: cyber-dojo
+  KOSLI_HOST: ${{ vars.KOSLI_HOST }}  # https://app.kosli.com
+  KOSLI_ORG:  ${{ vars.KOSLI_ORG }}   # cyber-dojo
   KOSLI_FLOW: monorepo
 
 jobs:
@@ -68,8 +69,8 @@ jobs:
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
     uses: ./.github/workflows/a.yml
     with:
-      trail: ${{ github.sha }}
-      flow: monorepo
+      kosli_trail: ${{ github.sha }}
+      kosli_flow: monorepo
     secrets: inherit
 
   build-B:
@@ -77,8 +78,8 @@ jobs:
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'B') }}
     uses: ./.github/workflows/b.yml
     with:
-      trail: ${{ github.sha }}
-      flow: monorepo
+      kosli_trail: ${{ github.sha }}
+      kosli_flow: monorepo
     secrets: inherit
 
   build-C:
@@ -86,8 +87,8 @@ jobs:
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'C') }}
     uses: ./.github/workflows/c.yml
     with:
-      trail: ${{ github.sha }}
-      flow: monorepo
+      kosli_trail: ${{ github.sha }}
+      kosli_flow: monorepo
     secrets: inherit
 
   # The synchronization barrier is `needs` here, not anything in Kosli (Kosli has

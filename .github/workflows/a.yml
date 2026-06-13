@@ -10,8 +10,8 @@ name: A
 on:
   workflow_call:
     inputs:
-      trail: { required: true, type: string }
-      flow:  { required: true, type: string }
+      kosli_trail: { required: true, type: string }
+      kosli_flow:  { required: true, type: string }
 
 permissions:
   contents: read
@@ -20,10 +20,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      KOSLI_ORG: cyber-dojo
+      KOSLI_HOST: ${{ vars.KOSLI_HOST }}
+      KOSLI_ORG:  ${{ vars.KOSLI_ORG }}
       KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-      KOSLI_FLOW: ${{ inputs.flow }}
-      KOSLI_TRAIL: ${{ inputs.trail }}
+      KOSLI_FLOW: ${{ inputs.kosli_flow }}
+      KOSLI_TRAIL: ${{ inputs.kosli_trail }}
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v6
