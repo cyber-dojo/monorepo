@@ -110,3 +110,6 @@ jobs:
             --org "$KOSLI_ORG" \
             --policy policy/gate.rego \
             --assert        # exit non-zero on deny; explicit because the default will flip in future
+
+
+# Edit this comment to force a full workflow run: 000
