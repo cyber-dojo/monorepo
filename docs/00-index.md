@@ -15,6 +15,9 @@ each decision was made. They build on each other; read in order.
    rules it follows, and the real cyber-dojo data that justifies it.
 6. [Safety and trade-offs](06-safety-and-tradeoffs.md) -- the failure modes we
    designed against, the deliberate biases, and the open questions to confirm.
+7. [Snyk scanning](07-snyk-scanning.md) -- how each component's .snyk policy is
+   located once the repos merge, via a committed policy-map file, and the change
+   needed in the shared snyk-scanning workflow.
 
 ## The shape in one diagram
 
