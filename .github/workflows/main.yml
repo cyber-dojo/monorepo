@@ -17,15 +17,34 @@ permissions:
   contents: read
 
 env:
-  KOSLI_HOST: ${{ vars.KOSLI_HOST }}  # https://app.kosli.com
-  KOSLI_ORG:  ${{ vars.KOSLI_ORG }}   # cyber-dojo
-  KOSLI_FLOW: monorepo
+  KOSLI_HOST:  ${{ vars.KOSLI_HOST }}  # https://app.kosli.com
+  KOSLI_ORG:   ${{ vars.KOSLI_ORG }}   # cyber-dojo
+  KOSLI_FLOW:  ${{ vars.KOSLI_FLOW }}
+  KOSLI_TRAIL: ${{ github.sha }}
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      kosli_flow:  ${{ steps.vars.outputs.kosli_flow }}
+      kosli_trail: ${{ steps.vars.outputs.kosli_trail }}
+    steps:
+      - name: Prepare outputs for workflow jobs
+        id: vars
+        run: |
+          {
+            echo "kosli_flow=${KOSLI_FLOW}"
+            echo "kosli_trail=${KOSLI_TRAIL}"
+          } > ${GITHUB_OUTPUT}
+
+
   # Always runs (no path filter). This is the single oracle: only a job that runs
   # on every commit can notice that a component which SHOULD have built did not.
   scope:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # for the PR for the attestation below
     outputs:
       components: ${{ steps.filter.outputs.changes }}
     steps:
@@ -56,39 +75,51 @@ jobs:
           bin/scoped-template '${{ steps.filter.outputs.changes }}' > scoped-template.yml
           echo "----- scoped template for this commit -----"
           cat scoped-template.yml
-          kosli begin trail "$GITHUB_SHA" \
-            --flow "$KOSLI_FLOW" \
-            --org "$KOSLI_ORG" \
+          kosli begin trail "${KOSLI_TRAIL}" \
             --template-file scoped-template.yml
+
+      # The pull-request attestation is TRAIL-level (declared once in
+      # kosli/trail.yml), so it covers the whole commit, not any single artifact.
+      # It must be reported here, right after the trail is opened -- before any
+      # component runs -- because each component's `kosli assert artifact` gate
+      # judges the whole trail and fails while this required attestation is MISSING.
+      - name: Attest pull-request evidence to the trail
+        if: ${{ steps.filter.outputs.changes != '[]' }}
+        env:
+          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+        run:
+          kosli attest pullrequest github
+            --github-token "${{ secrets.GITHUB_TOKEN }}"
+            --name pull-request
 
   # One caller job per component, each guarded by the scope output. A matrix is
   # NOT used here on purpose: A, B and C have genuinely different pipelines, so
   # each gets its own reusable workflow.
   build-A:
-    needs: scope
+    needs: [setup, scope]
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
     uses: ./.github/workflows/a.yml
     with:
-      kosli_trail: ${{ github.sha }}
-      kosli_flow: monorepo
+      kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
+      kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
     secrets: inherit
 
   build-B:
-    needs: scope
+    needs: [setup, scope]
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'B') }}
     uses: ./.github/workflows/b.yml
     with:
-      kosli_trail: ${{ github.sha }}
-      kosli_flow: monorepo
+      kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
+      kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
     secrets: inherit
 
   build-C:
-    needs: scope
+    needs: [setup, scope]
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'C') }}
     uses: ./.github/workflows/c.yml
     with:
-      kosli_trail: ${{ github.sha }}
-      kosli_flow: monorepo
+      kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
+      kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
     secrets: inherit
 
   # The synchronization barrier is `needs` here, not anything in Kosli (Kosli has
@@ -101,14 +132,13 @@ jobs:
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v6
+
       - name: Tie A/B/C compliance together for this commit
         env:
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-        run: |
-          kosli evaluate trail "$GITHUB_SHA" \
-            --flow "$KOSLI_FLOW" \
-            --org "$KOSLI_ORG" \
-            --policy policy/gate.rego \
+        run:
+          kosli evaluate trail "${KOSLI_TRAIL}"
+            --policy policy/gate.rego
             --assert        # exit non-zero on deny; explicit because the default will flip in future
 
 
