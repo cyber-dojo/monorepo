@@ -127,5 +127,7 @@ All against a fresh local server; each row is asserted, not assumed.
 Server-free generator tests (no server needed):
 - `bin/scoped-template` composes a strict subset of the fragments (trail-level
   always; exactly the changed components' artifacts) -> `test/scripts/test_scoped_template.sh`
-- `bin/gen-filters` derives `X: ['source/X/**']` from each fragment file ->
+- `bin/gen-filters` derives each component's filter from its fragment file: it
+  watches `source/X/**`, the component's own workflow `.github/workflows/x.yml`,
+  and the shared orchestration paths (so a global edit rebuilds everything) ->
   `test/scripts/test_gen_filters.sh`

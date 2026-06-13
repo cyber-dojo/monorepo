@@ -36,11 +36,25 @@ keep in sync.
 ## Discovery: one fact, two uses
 
 `bin/gen-filters` treats "a directory under `source/` that contains a
-`kosli.yml`" as the definition of a component, and emits `X: ['source/X/**']` for
-each. So the existence of the fragment file drives both:
+`kosli.yml`" as the definition of a component. So the existence of the fragment
+file drives both:
 
 - which components exist, and
 - how a change to a component is detected.
+
+A component is detected as changed when ANY of three things change:
+
+- `source/X/**` -- X's own source tree;
+- `.github/workflows/x.yml` -- X's own reusable pipeline (the name is the
+  component name lowercased, by convention); or
+- the shared orchestration files -- `main.yml`, the `bin/` generators,
+  `kosli/trail.yml`, `policy/gate.rego`.
+
+The pipeline file is watched because a change to *how* X is built and attested is
+just as build-relevant as a change to X's source: without it, editing `a.yml`
+would silently skip A's build. The shared files are watched by every component so
+that an orchestration change rebuilds all components -- see "Global edits rebuild
+everything" below.
 
 Add a component D by creating `source/D/kosli.yml` and `source/D/...`; the
 filters and the template composition pick it up with no other edits. (You still
@@ -54,14 +68,15 @@ The fragment's attestation names are the interface. `source/A/kosli.yml` declare
 the missing one shows up as `MISSING` -> non-compliant. That is the safe
 direction: a naming mistake fails closed, it does not silently pass.
 
-## The trail-level edit edge case
+## Global edits rebuild everything
 
-Editing `kosli/trail.yml` sits under no component path, so by default it rebuilds
-nothing. That is usually fine: the `scope` job always runs and composes the new
-trail-level rules on the next commit regardless, and trail-level attestations
-(like `pull-request`) are produced by the orchestrator, not the component builds.
+A change to a shared orchestration file -- `main.yml`, the `bin/` generators,
+`kosli/trail.yml`, or `policy/gate.rego` -- changes how *every* component is
+built or evaluated. `bin/gen-filters` therefore includes those paths in every
+component's filter, so editing any one of them puts all components in scope and
+rebuilds them.
 
-If you ever want a trail-rule change to force every component to re-attest against
-the new global policy, add `kosli/trail.yml` to every component's path filter on
-purpose. That is a rare "global compliance policy changed" event where a full
-rebuild is the correct, safe response.
+This is the safe direction. A global compliance-policy or template change that
+silently rebuilt nothing could leave the trail reporting compliant against rules
+the artifacts were never actually re-evaluated against. Failing toward a full
+rebuild matches Kosli's asymmetry: never report compliant when it might not be.

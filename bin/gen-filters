@@ -2,13 +2,30 @@
 """Generate the dorny/paths-filter `filters:` YAML from the component fragments.
 
 A directory under source/ is a component if and only if it contains a kosli.yml
-fragment. Each component X is mapped to the path filter 'source/X/**'. This keeps
-two things derived from one fact -- the presence of the fragment file:
+fragment. This keeps two things derived from one fact -- the presence of the
+fragment file:
 
   * which components exist, and
   * how a change to a component is detected.
 
 There is no second list of components to drift out of sync with the first.
+
+A component X is detected as changed when ANY of these change:
+
+  * source/X/**                   -- X's own source tree, OR
+  * .github/workflows/x.yml       -- X's own (reusable) pipeline definition, OR
+  * any file in SHARED_PATHS      -- the orchestration that builds/evaluates
+                                     EVERY component (main.yml, the bin/
+                                     generators, the trail skeleton, the gate
+                                     policy).
+
+The pipeline file is included because a change to HOW X is built and attested is
+just as build-relevant as a change to X's source -- without it, editing x.yml
+would silently skip X's build. The shared paths are included in every component
+so that an orchestration change rebuilds all components: failing toward
+rebuilding (Kosli's "never report compliant when it might not be") rather than
+silently skipping. The x.yml name is the component name lowercased, by
+convention.
 
 Usage:
   bin/gen-filters
@@ -25,6 +42,17 @@ import argparse
 import sys
 from pathlib import Path
 
+# Orchestration files that affect how EVERY component is built or evaluated. A
+# change to any of these rebuilds all components, so they appear in every
+# component's filter list.
+SHARED_PATHS = [
+    ".github/workflows/main.yml",
+    "bin/gen-filters",
+    "bin/scoped-template",
+    "kosli/trail.yml",
+    "policy/gate.rego",
+]
+
 
 def discover_components(repo_root):
     """Return sorted component names: dirs under source/ that hold a kosli.yml."""
@@ -37,8 +65,16 @@ def discover_components(repo_root):
 
 
 def render_filters(components):
-    """Return dorny/paths-filter YAML mapping each component to its path glob."""
-    lines = [f"{name}: ['source/{name}/**']" for name in components]
+    """Return dorny/paths-filter YAML mapping each component to its watched globs.
+
+    Each component watches its own source tree, its own (lowercased) workflow
+    file, and the shared orchestration paths -- see the module docstring.
+    """
+    lines = []
+    for name in components:
+        globs = [f"source/{name}/**", f".github/workflows/{name.lower()}.yml", *SHARED_PATHS]
+        rendered = ", ".join(f"'{glob}'" for glob in globs)
+        lines.append(f"{name}: [{rendered}]")
     return "\n".join(lines) + "\n"
 
 
