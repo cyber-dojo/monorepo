@@ -28,6 +28,7 @@ jobs:
     outputs:
       components: ${{ steps.filter.outputs.changes }}
     steps:
+      - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # history is needed so the path filter can diff
@@ -97,6 +98,7 @@ jobs:
     if: ${{ !cancelled() && needs.scope.outputs.components != '[]' }}
     runs-on: ubuntu-latest
     steps:
+      - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v4
       - name: Tie A/B/C compliance together for this commit
         env:

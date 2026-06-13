@@ -19,6 +19,7 @@ jobs:
       KOSLI_FLOW: ${{ inputs.flow }}
       KOSLI_TRAIL: ${{ inputs.trail }}
     steps:
+      - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v4
 
       - name: Build
