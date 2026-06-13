@@ -29,7 +29,7 @@ jobs:
       components: ${{ steps.filter.outputs.changes }}
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0   # history is needed so the path filter can diff
 
@@ -40,7 +40,7 @@ jobs:
 
       - name: Detect changed components
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: .github/filters.generated.yml
 
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Tie A/B/C compliance together for this commit
         env:
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}

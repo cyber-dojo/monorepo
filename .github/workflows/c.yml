@@ -20,7 +20,7 @@ jobs:
       KOSLI_TRAIL: ${{ inputs.trail }}
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build
         run: source/C/build.sh build
