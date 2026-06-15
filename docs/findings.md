@@ -23,11 +23,14 @@ Context unless stated otherwise:
 - **`kosli attest artifact` requires the positional artifact ref even with
   `--fingerprint`.** The usage is `kosli attest artifact {IMAGE-NAME | FILE-PATH |
   DIR-PATH} [flags]`; omitting it errors `docker image name or file/dir path is
-  required`, despite the `--help` example showing `--fingerprint` with no
-  positional. When `--fingerprint` is supplied the CLI uses the positional only as
-  the artifact's `filename` and does NOT open it -- so a path the current job does
-  not have (e.g. a `dist/` artifact built in another job) is fine. This is what
-  lets the orchestrator's bind job attest by fingerprint without the artifact file.
+  required`. The `--help` "provide its fingerprint" example does include the
+  positional (`kosli attest artifact ANOTHER_FILE.txt ... --fingerprint ...`) --
+  it is easy to miss if you grep the help for flag names, because the command line
+  carrying the positional matches no flag. When `--fingerprint` is supplied the CLI
+  uses the positional only as the artifact's `filename` and does NOT open it -- so
+  a path the current job does not have (e.g. a `dist/` artifact built in another
+  job) is fine. This is what lets the orchestrator's bind job attest by fingerprint
+  without the artifact file.
 - **attest flag sets differ per command.** `--commit-url` and `--build-url`
   exist on `kosli attest artifact` (and `--build-url` is required there), but
   `kosli attest generic` / `attest junit` REJECT `--commit-url` ("unknown flag")
