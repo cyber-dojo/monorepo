@@ -121,7 +121,7 @@ jobs:
             --flow "${{ needs.build-A.outputs.flow }}" \
             --policy policy/component.rego \
             --assert
-          kosli attest artifact \
+          kosli attest artifact "${{ needs.build-A.outputs.image }}" \
             --fingerprint "${{ needs.build-A.outputs.fingerprint }}" \
             --name A \
             --flow "${{ needs.setup.outputs.kosli_flow }}" \
@@ -153,7 +153,7 @@ jobs:
             --flow "${{ needs.build-B.outputs.flow }}" \
             --policy policy/component.rego \
             --assert
-          kosli attest artifact \
+          kosli attest artifact "${{ needs.build-B.outputs.image }}" \
             --fingerprint "${{ needs.build-B.outputs.fingerprint }}" \
             --name B \
             --flow "${{ needs.setup.outputs.kosli_flow }}" \
@@ -185,7 +185,7 @@ jobs:
             --flow "${{ needs.build-C.outputs.flow }}" \
             --policy policy/component.rego \
             --assert
-          kosli attest artifact \
+          kosli attest artifact "${{ needs.build-C.outputs.image }}" \
             --fingerprint "${{ needs.build-C.outputs.fingerprint }}" \
             --name C \
             --flow "${{ needs.setup.outputs.kosli_flow }}" \

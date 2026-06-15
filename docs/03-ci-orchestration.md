@@ -77,11 +77,14 @@ service and, only on success, records it in the co-deployment set:
    ${{ needs.build-A.outputs.flow }} --policy policy/component.rego --assert`. A
    non-compliant service flow exits non-zero and stops the job here.
 2. Only if that gate passed, attests the artifact into the shared trail by
-   fingerprint: `kosli attest artifact --fingerprint
-   ${{ needs.build-A.outputs.fingerprint }} --name A --flow
+   fingerprint: `kosli attest artifact ${{ needs.build-A.outputs.image }}
+   --fingerprint ${{ needs.build-A.outputs.fingerprint }} --name A --flow
    ${{ needs.setup.outputs.kosli_flow }} --trail
-   ${{ needs.setup.outputs.kosli_trail }}`. This is the one write to the binding
-   trail, and it records A in this commit's co-deployment set.
+   ${{ needs.setup.outputs.kosli_trail }}`. The positional artifact ref is
+   required even with `--fingerprint`; with the fingerprint supplied the CLI uses
+   it only as the artifact's filename and never opens the file (which the bind job
+   does not have). This is the one write to the binding trail, and it records A in
+   this commit's co-deployment set.
 
 Both steps run in one `set -euo pipefail` block, so the attest is unreachable
 unless the evaluate `--assert` passed. The bind job lives next to its build job in
