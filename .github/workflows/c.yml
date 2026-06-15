@@ -5,6 +5,13 @@ on:
     inputs:
       kosli_trail: { required: true, type: string }
       kosli_flow:  { required: true, type: string }
+    outputs:
+      image:
+        description: "Ref of the artifact C built, for its deployment."
+        value: ${{ jobs.build.outputs.image }}
+      fingerprint:
+        description: "SHA256 fingerprint of the artifact C built."
+        value: ${{ jobs.build.outputs.fingerprint }}
 
 env:
   KOSLI_HOST: ${{ vars.KOSLI_HOST }}
@@ -15,6 +22,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      image:       ${{ steps.identity.outputs.image }}
+      fingerprint: ${{ steps.identity.outputs.fingerprint }}
     permissions:
       contents: read
       pull-requests: read
@@ -43,6 +53,16 @@ jobs:
 
       - name: Package artifact
         run: source/C/build.sh image
+
+      - name: Record built-artifact identity for deployment
+        id: identity
+        run: |
+          image="source/C/dist/C.tar"
+          fingerprint="$(kosli fingerprint --artifact-type file source/C/dist/C.tar)"
+          {
+            echo "image=${image}"
+            echo "fingerprint=${fingerprint}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Report artifact C
         run:
