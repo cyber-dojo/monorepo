@@ -1,4 +1,4 @@
-# Edit this comment to force a full workflow run: 000
+# Edit this comment to force a full workflow run: 001
 
 # Orchestrator for the cyber-dojo monorepo.
 #
@@ -135,4 +135,35 @@ jobs:
           kosli evaluate trail "${KOSLI_TRAIL}"
             --policy policy/gate.rego
             --assert
+
+
+  # Deployment. One caller job per component, NOT a matrix: each component's
+  # image+fingerprint comes from the matching build job's outputs, and a matrix
+  # leg cannot reach a per-component build job's outputs. Each deploys ONLY when
+  # its build ran AND the whole-commit gate passed -- an out-of-scope component
+  # skips its build (so its deploy skips via `needs`), and a denied gate fails the
+  # gate job (so every deploy skips). Co-deployment is all-or-nothing per commit.
+  deploy-A:
+    needs: [build-A, gate]
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+    with:
+      image:       ${{ needs.build-A.outputs.image }}
+      fingerprint: ${{ needs.build-A.outputs.fingerprint }}
+
+  deploy-B:
+    needs: [build-B, gate]
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+    with:
+      image:       ${{ needs.build-B.outputs.image }}
+      fingerprint: ${{ needs.build-B.outputs.fingerprint }}
+
+  deploy-C:
+    needs: [build-C, gate]
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+    with:
+      image:       ${{ needs.build-C.outputs.image }}
+      fingerprint: ${{ needs.build-C.outputs.fingerprint }}
 

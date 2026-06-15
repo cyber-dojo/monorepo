@@ -1,0 +1,22 @@
+name: deploy
+
+# Shared, parameterized deployment workflow. main.yml calls it once per rebuilt
+# component (deploy-A/B/C), after the whole-commit gate has passed. The artifact
+# to deploy is identified entirely by the image ref + fingerprint that the
+# building workflow (a.yml/b.yml/c.yml) returned as outputs, so this workflow does
+# not need to know which component it is.
+on:
+  workflow_call:
+    inputs:
+      image:       { required: true, type: string }
+      fingerprint: { required: true, type: string }
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy the built artifact
+        run: |
+          echo "Deploying image:       ${{ inputs.image }}"
+          echo "          fingerprint: ${{ inputs.fingerprint }}"
+          # TODO: deploy this exact artifact (the image+fingerprint the build produced).
