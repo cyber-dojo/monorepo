@@ -1,3 +1,5 @@
+# Edit this comment to force a full workflow run: 000
+
 # Orchestrator for the cyber-dojo monorepo.
 #
 # One always-on `scope` job decides which components changed, composes a Kosli
@@ -6,7 +8,7 @@
 # the whole commit's compliance together with a single `kosli evaluate trail`.
 #
 # The full design and the reasoning behind every choice are in ../../docs/.
-name: monorepo
+name: monorepo orchestrator
 
 on:
   push:
@@ -19,7 +21,7 @@ permissions:
 env:
   KOSLI_HOST:  ${{ vars.KOSLI_HOST }}  # https://app.kosli.com
   KOSLI_ORG:   ${{ vars.KOSLI_ORG }}   # cyber-dojo
-  KOSLI_FLOW:  ${{ vars.KOSLI_FLOW }}
+  KOSLI_FLOW:  monorepo-co-deployment
   KOSLI_TRAIL: ${{ github.sha }}
 
 jobs:
@@ -42,9 +44,6 @@ jobs:
   # on every commit can notice that a component which SHOULD have built did not.
   scope:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read   # for the PR for the attestation below
     outputs:
       components: ${{ steps.filter.outputs.changes }}
     steps:
@@ -78,19 +77,6 @@ jobs:
           kosli begin trail "${KOSLI_TRAIL}" \
             --template-file scoped-template.yml
 
-      # The pull-request attestation is TRAIL-level (declared once in
-      # kosli/trail.yml), so it covers the whole commit, not any single artifact.
-      # It must be reported here, right after the trail is opened -- before any
-      # component runs -- because each component's `kosli assert artifact` gate
-      # judges the whole trail and fails while this required attestation is MISSING.
-      - name: Attest pull-request evidence to the trail
-        if: ${{ steps.filter.outputs.changes != '[]' }}
-        env:
-          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-        run:
-          kosli attest pullrequest github
-            --github-token "${{ secrets.GITHUB_TOKEN }}"
-            --name pull-request
 
   # One caller job per component, each guarded by the scope output. A matrix is
   # NOT used here on purpose: A, B and C have genuinely different pipelines, so
@@ -98,29 +84,38 @@ jobs:
   build-A:
     needs: [setup, scope]
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/a.yml
+    secrets: inherit
     with:
       kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
       kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
-    secrets: inherit
 
   build-B:
     needs: [setup, scope]
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'B') }}
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/b.yml
+    secrets: inherit
     with:
       kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
       kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
-    secrets: inherit
 
   build-C:
     needs: [setup, scope]
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'C') }}
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/c.yml
+    secrets: inherit
     with:
       kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
       kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
-    secrets: inherit
 
   # The synchronization barrier is `needs` here, not anything in Kosli (Kosli has
   # no wait/poll primitive). `!cancelled()` ensures a skipped or failed component
@@ -139,7 +134,5 @@ jobs:
         run:
           kosli evaluate trail "${KOSLI_TRAIL}"
             --policy policy/gate.rego
-            --assert        # exit non-zero on deny; explicit because the default will flip in future
+            --assert
 
-
-# Edit this comment to force a full workflow run: 000

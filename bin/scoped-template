@@ -1,22 +1,34 @@
 #!/usr/bin/env python3
-"""Compose a Kosli flow template scoped to the components that changed.
+"""Compose the monorepo-co-deployment flow template, scoped to this commit.
 
-The output merges two sources:
+The `monorepo-co-deployment` flow does NOT re-run any service's SDLC controls.
+Those live in each service's own flow (`monorepo-a`, `monorepo-b`, ...), defined
+in `source/<name>/kosli.yml` and opened by that service's reusable workflow. This
+flow records ONLY the co-deployment set: which component artifacts were built and
+cleared their own gate on this commit.
 
-  * kosli/trail.yml -- the shared skeleton holding the TRAIL-LEVEL attestations
-    that apply to every commit (e.g. pull-request), declared once here; and
-  * source/<name>/kosli.yml -- one artifact fragment per CHANGED component,
-    each appended to the skeleton's trail.artifacts list.
+So the generated template is just one bare artifact entry per CHANGED component:
 
-So the trail-level attestations are NOT repeated in the per-component fragments:
-they live once in kosli/trail.yml and are merged in here. Components that did not
-change are absent from the result, so the trail's compliance covers exactly what
+    version: 1
+    trail:
+      artifacts:
+        - name: A
+        - name: B
+
+There are deliberately NO trail-level attestations (e.g. pull-request now lives
+in each service's own flow) and NO per-artifact attestations here. A service
+attests its artifact to this trail (`kosli attest artifact --name A --flow ...`)
+only AFTER passing its own self-check, so the mere presence of the artifact is
+the evidence. An in-scope component that was expected but never attested shows up
+as MISSING and drags the trail non-compliant, which is exactly what the gate
+(`kosli evaluate trail`) keys on. So the trail's compliance covers exactly what
 this commit should have built -- never more, and (crucially) never less.
 
-The output is a strict subset of those inputs: each component's required
-attestations are defined once, in that component's own fragment (and the
-trail-level ones once in the skeleton), and only ever filtered/assembled here --
-never re-authored.
+The artifact names are the component names passed in; they match the `--name`
+each service attests with. Each named component must have a
+`source/<name>/kosli.yml` (the same file `bin/gen-filters` and the `scope` job
+key on); a name without one is a typo or drift and fails loud here rather than
+silently dropping the component from the co-deployment set.
 
 Usage:
   bin/scoped-template '["A","B"]'
@@ -24,7 +36,7 @@ Usage:
 
 Options:
   -h, --help       Show this help and exit.
-  --repo-root DIR  Repo root containing kosli/ and source/ (default: current dir).
+  --repo-root DIR  Repo root containing source/ (default: current dir).
 
 Example:
   bin/scoped-template '["A","B"]' > scoped-template.yml
@@ -37,30 +49,20 @@ from pathlib import Path
 import yaml
 
 
-def load_skeleton(repo_root):
-    """Load and return the shared trail-level template skeleton as a dict."""
-    path = repo_root / "kosli" / "trail.yml"
-    with path.open() as handle:
-        skeleton = yaml.safe_load(handle)
-    skeleton.setdefault("trail", {}).setdefault("artifacts", [])
-    return skeleton
-
-
-def load_fragment(repo_root, component):
-    """Load and return one component's artifact fragment as a dict."""
+def require_component(repo_root, component):
+    """Fail loud unless the named component has a source/<name>/kosli.yml."""
     path = repo_root / "source" / component / "kosli.yml"
     if not path.is_file():
-        raise SystemExit(f"no template fragment for component {component!r}: {path}")
-    with path.open() as handle:
-        return yaml.safe_load(handle)
+        raise SystemExit(f"no such component {component!r}: {path} not found")
 
 
 def compose(repo_root, components):
-    """Return the trail skeleton with each changed component's fragment appended."""
-    template = load_skeleton(repo_root)
+    """Return the co-deployment template: one bare artifact per component."""
+    artifacts = []
     for component in components:
-        template["trail"]["artifacts"].append(load_fragment(repo_root, component))
-    return template
+        require_component(repo_root, component)
+        artifacts.append({"name": component})
+    return {"version": 1, "trail": {"artifacts": artifacts}}
 
 
 def parse_args(argv):
@@ -72,7 +74,7 @@ def parse_args(argv):
     parser.add_argument(
         "--repo-root",
         default=".",
-        help="Repo root containing kosli/ and source/ (default: current dir).",
+        help="Repo root containing source/ (default: current dir).",
     )
     parser.add_argument(
         "changed",
@@ -82,7 +84,7 @@ def parse_args(argv):
 
 
 def main(argv):
-    """Entry point: compose the scoped template and write YAML to stdout."""
+    """Entry point: compose the co-deployment template and write YAML to stdout."""
     args = parse_args(argv)
     components = json.loads(args.changed)
     template = compose(Path(args.repo_root), components)

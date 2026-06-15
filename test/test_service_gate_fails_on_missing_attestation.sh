@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Proves (asymmetry): a single missing artifact-level attestation makes the trail
-# non-compliant and the gate deny -- a missing piece is never silently treated as
-# compliant. Here A's artifact and A.lint are attested but A.unit-test is omitted.
+# Tier 1 (per-service build flow), asymmetry. Proves a single MISSING artifact-
+# level attestation makes the artifact non-compliant in the service flow, so the
+# service's own gate (`kosli assert artifact`) DENIES (non-zero). A service that
+# cannot pass its own gate never reaches the step that attests it into the binding
+# trail. Here A's artifact and A.lint are attested but A.unit-test is omitted.
 # [docs/01 "missing -> non-compliant", docs/06 fail-closed]
 set -Eeu
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -11,7 +13,7 @@ source "${here}/lib.sh"
 flow="$(basename "$0" .sh | tr '_' '-')"   # dedicated flow named after this test
 work="${_tmpdir}/work"; mkdir -p "${work}"
 repo="${work}/repo"
-sha="$(make_commit "${repo}" "missing-artifact-attestation commit")"
+sha="$(make_commit "${repo}" "service missing-attestation commit")"
 trail="${sha}"
 url="https://github.com/cyber-dojo/monorepo"
 agf=(--repo-root "${repo}" --commit "${sha}" --commit-url "${url}/commit/${sha}" --build-url "${url}/actions/runs/1")
@@ -31,7 +33,7 @@ trail:
 YML
 
 echo "## arrange -- attest everything EXCEPT A.unit-test"
-kosli_cli create flow "${flow}" --description "missing artifact attestation" --template-file "${work}/template.yml"
+kosli_cli create flow "${flow}" --description "service missing attestation" --template-file "${work}/template.yml"
 assert_exit_zero "create flow"
 kosli_cli begin trail "${trail}" --flow "${flow}"
 assert_exit_zero "begin trail"
@@ -46,15 +48,15 @@ assert_exit_zero "attest A.lint"
 echo "## act"
 kosli_cli get trail "${trail}" --flow "${flow}" --output json
 assert_exit_zero "get trail --output json"
-trail_ic="$(json '.compliance_status.is_compliant')"
+a_ic="$(json '.compliance_status.artifacts_statuses.A.is_compliant')"
 ut_status="$(json '.compliance_status.artifacts_statuses.A.attestations_statuses[]? | select(.attestation_name=="unit-test") | .status')"
-echo "  OBSERVED trail is_compliant            = ${trail_ic}"
-echo "  OBSERVED A.unit-test status            = ${ut_status:-<absent>}"
+echo "  OBSERVED A.unit-test status         = ${ut_status:-<absent>}"
+echo "  OBSERVED A is_compliant             = ${a_ic}"
 
-echo "## assert -- one missing attestation => non-compliant + gate denies"
+echo "## assert -- one missing attestation => artifact non-compliant + self-check denies"
 assert_equals "A.unit-test reported as MISSING" "${ut_status}" "MISSING"
-assert_equals "trail NOT compliant with A.unit-test missing" "${trail_ic}" "false"
-kosli_cli evaluate trail "${trail}" --flow "${flow}" --policy "${root}/policy/gate.rego" --assert
-assert_exit_nonzero "gate.rego denies"
+assert_equals "artifact A NOT compliant" "${a_ic}" "false"
+kosli_cli assert artifact "${work}/A.bin" --artifact-type file --flow "${flow}"
+assert_exit_nonzero "kosli assert artifact (the service self-check) DENIES"
 
 finish

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Proves (asymmetry): a present-but-FAILING attestation (not just a missing one)
-# makes the trail non-compliant and the gate deny. Everything is attested, but
-# A.lint is reported with --compliant=false.
+# Tier 1 (per-service build flow), asymmetry. Proves a present-but-FAILING
+# attestation (not just a missing one) makes the artifact non-compliant in the
+# service flow, so the service's own gate (`kosli assert artifact`) DENIES
+# (non-zero). Everything is attested, but A.lint is reported --compliant=false.
 # [docs/01 asymmetry, docs/05 positive proof of compliance]
 set -Eeu
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -11,7 +12,7 @@ source "${here}/lib.sh"
 flow="$(basename "$0" .sh | tr '_' '-')"   # dedicated flow named after this test
 work="${_tmpdir}/work"; mkdir -p "${work}"
 repo="${work}/repo"
-sha="$(make_commit "${repo}" "failing-attestation commit")"
+sha="$(make_commit "${repo}" "service failing-attestation commit")"
 trail="${sha}"
 url="https://github.com/cyber-dojo/monorepo"
 agf=(--repo-root "${repo}" --commit "${sha}" --commit-url "${url}/commit/${sha}" --build-url "${url}/actions/runs/1")
@@ -32,7 +33,7 @@ trail:
 YML
 
 echo "## arrange -- attest everything, but A.lint is --compliant=false"
-kosli_cli create flow "${flow}" --description "failing attestation" --template-file "${work}/template.yml"
+kosli_cli create flow "${flow}" --description "service failing attestation" --template-file "${work}/template.yml"
 assert_exit_zero "create flow"
 kosli_cli begin trail "${trail}" --flow "${flow}"
 assert_exit_zero "begin trail"
@@ -48,15 +49,15 @@ assert_exit_zero "attest A.unit-test"
 echo "## act"
 kosli_cli get trail "${trail}" --flow "${flow}" --output json
 assert_exit_zero "get trail --output json"
-trail_ic="$(json '.compliance_status.is_compliant')"
+a_ic="$(json '.compliance_status.artifacts_statuses.A.is_compliant')"
 lint_ic="$(json '.compliance_status.artifacts_statuses.A.attestations_statuses[]? | select(.attestation_name=="lint") | .is_compliant')"
-echo "  OBSERVED trail is_compliant   = ${trail_ic}"
-echo "  OBSERVED A.lint is_compliant  = ${lint_ic}"
+echo "  OBSERVED A.lint is_compliant = ${lint_ic}"
+echo "  OBSERVED A is_compliant      = ${a_ic}"
 
-echo "## assert -- a failing attestation => non-compliant + gate denies"
+echo "## assert -- a failing attestation => artifact non-compliant + self-check denies"
 assert_equals "A.lint reported non-compliant" "${lint_ic}" "false"
-assert_equals "trail NOT compliant with a failing attestation" "${trail_ic}" "false"
-kosli_cli evaluate trail "${trail}" --flow "${flow}" --policy "${root}/policy/gate.rego" --assert
-assert_exit_nonzero "gate.rego denies"
+assert_equals "artifact A NOT compliant" "${a_ic}" "false"
+kosli_cli assert artifact "${work}/A.bin" --artifact-type file --flow "${flow}"
+assert_exit_nonzero "kosli assert artifact (the service self-check) DENIES"
 
 finish

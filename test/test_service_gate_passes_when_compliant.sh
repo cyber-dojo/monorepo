@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Proves: the gate ALLOWS only when the trail is genuinely compliant. This is the
-# positive control that makes every deny-test meaningful (a gate that always
-# denied would pass them all). Also shows a trail scoped to {A} is compliant
-# without B/C -- components not in the scoped template are not required.
-# [docs/01 goals, docs/02 per-trail scoping, docs/05 allow-when-compliant]
+# Tier 1 (per-service build flow). Proves the service's OWN gate -- `kosli assert
+# artifact` against the service flow -- PASSES (exit 0) when the service flow is
+# fully compliant. This is the positive control: only when this passes does a
+# service go on to attest its artifact into the binding trail (see the cross-tier
+# test). [docs/03 "what each component workflow does", docs/05]
 set -Eeu
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "${here}/.." && pwd)"
@@ -12,7 +12,7 @@ source "${here}/lib.sh"
 flow="$(basename "$0" .sh | tr '_' '-')"   # dedicated flow named after this test
 work="${_tmpdir}/work"; mkdir -p "${work}"
 repo="${work}/repo"
-sha="$(make_commit "${repo}" "green path commit")"
+sha="$(make_commit "${repo}" "service gate passes commit")"
 trail="${sha}"
 url="https://github.com/cyber-dojo/monorepo"
 agf=(--repo-root "${repo}" --commit "${sha}" --commit-url "${url}/commit/${sha}" --build-url "${url}/actions/runs/1")
@@ -20,6 +20,8 @@ cgf=(--repo-root "${repo}" --commit "${sha}")
 write_junit "${work}/reports"
 printf 'artifact A for %s\n' "${flow}" > "${work}/A.bin"   # unique fingerprint per test
 
+# A service flow template: a trail-level attestation (generic 'approval' stands in
+# for the real pull-request, which needs GitHub) plus artifact A{lint,unit-test}.
 cat > "${work}/template.yml" <<'YML'
 version: 1
 trail:
@@ -32,8 +34,8 @@ trail:
         - { name: unit-test, type: junit }
 YML
 
-echo "## arrange -- everything the {A} template requires, all compliant"
-kosli_cli create flow "${flow}" --description "green path" --template-file "${work}/template.yml"
+echo "## arrange -- everything the service flow requires, all compliant"
+kosli_cli create flow "${flow}" --description "service gate passes" --template-file "${work}/template.yml"
 assert_exit_zero "create flow"
 kosli_cli begin trail "${trail}" --flow "${flow}"
 assert_exit_zero "begin trail"
@@ -46,15 +48,15 @@ assert_exit_zero "attest A.lint"
 kosli_cli attest junit --name A.unit-test --results-dir "${work}/reports" --flow "${flow}" --trail "${trail}" "${cgf[@]}"
 assert_exit_zero "attest A.unit-test"
 
-echo "## act"
+echo "## act -- read the service flow's view of A, then run the service's own gate"
 kosli_cli get trail "${trail}" --flow "${flow}" --output json
 assert_exit_zero "get trail --output json"
-trail_ic="$(json '.compliance_status.is_compliant')"
-echo "  OBSERVED trail is_compliant = ${trail_ic}"
+a_ic="$(json '.compliance_status.artifacts_statuses.A.is_compliant')"
+echo "  OBSERVED A is_compliant in service flow = ${a_ic}"
 
-echo "## assert -- genuinely compliant => trail compliant AND gate allows"
-assert_equals "trail compliant when all required present+compliant" "${trail_ic}" "true"
-kosli_cli evaluate trail "${trail}" --flow "${flow}" --policy "${root}/policy/gate.rego" --assert
-assert_exit_zero "gate.rego ALLOWS the compliant trail"
+echo "## assert -- A compliant in its flow => the self-check gate exits 0"
+assert_equals "artifact A compliant in service flow" "${a_ic}" "true"
+kosli_cli assert artifact "${work}/A.bin" --artifact-type file --flow "${flow}"
+assert_exit_zero "kosli assert artifact (the service self-check) PASSES"
 
 finish

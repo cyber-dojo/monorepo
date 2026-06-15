@@ -16,8 +16,7 @@ A component X is detected as changed when ANY of these change:
   * .github/workflows/x.yml       -- X's own (reusable) pipeline definition, OR
   * any file in SHARED_PATHS      -- the orchestration that builds/evaluates
                                      EVERY component (main.yml, the bin/
-                                     generators, the trail skeleton, the gate
-                                     policy).
+                                     generators, the gate policy).
 
 The pipeline file is included because a change to HOW X is built and attested is
 just as build-relevant as a change to X's source -- without it, editing x.yml
@@ -49,7 +48,6 @@ SHARED_PATHS = [
     ".github/workflows/main.yml",
     "bin/gen-filters",
     "bin/scoped-template",
-    "kosli/trail.yml",
     "policy/gate.rego",
 ]
 

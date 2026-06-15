@@ -4,7 +4,7 @@
 #   * the component's source tree     source/X/**
 #   * the component's own pipeline     .github/workflows/x.yml   (lowercased)
 #   * the shared orchestration infra   main.yml, the bin/ generators,
-#     kosli/trail.yml, policy/gate.rego
+#     policy/gate.rego
 # so that editing a component's workflow, or any shared infra, rebuilds it.
 set -Eeu
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -23,8 +23,8 @@ assert_not_contains "A does not watch B's workflow"    "${a}" "workflows/b.yml"
 assert_contains     "A watches shared orchestrator"    "${a}" ".github/workflows/main.yml"
 assert_contains     "A watches shared gen-filters"     "${a}" "bin/gen-filters"
 assert_contains     "A watches shared scoped-template" "${a}" "bin/scoped-template"
-assert_contains     "A watches shared trail skeleton"  "${a}" "kosli/trail.yml"
 assert_contains     "A watches shared gate policy"     "${a}" "policy/gate.rego"
+assert_not_contains "A no longer watches removed trail skeleton" "${a}" "kosli/trail.yml"
 
 b="$(line_for B)"
 assert_contains "B watches its source tree"  "${b}" "source/B/**"

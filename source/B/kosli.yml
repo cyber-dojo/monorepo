@@ -1,7 +1,10 @@
-# Component B's template fragment. Deliberately different from A: a different
-# language (Ruby) and a different evidence set (rubocop + a container scan).
-# Same contract: B's workflow attests these as B.<name>.
-name: B
-attestations:
-  - { name: rubocop,             type: junit }
-  - { name: snyk-container-scan, type: generic }
+
+version: 1
+trail:
+  attestations:
+    - { name: pull-request, type: pull_request }
+  artifacts:
+    - name: B
+      attestations:
+        - { name: rubocop,             type: junit }
+        - { name: snyk-container-scan, type: generic }

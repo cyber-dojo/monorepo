@@ -1,7 +1,8 @@
 # 5. The gate policy
 
-`policy/gate.rego` is evaluated by `kosli evaluate trail` in the `gate` job. It
-turns the whole scoped trail into one allow/deny verdict.
+`policy/gate.rego` is evaluated by `kosli evaluate trail` in the `gate` job,
+against the `monorepo-co-deployment` trail. It turns that one binding trail into a
+single allow/deny verdict for the whole commit.
 
 ## The policy
 
@@ -29,27 +30,39 @@ violations contains msg if { ... }   # diagnostics only
    `is_compliant` field to be present and exactly `true`; if it is absent or
    renamed the expression is undefined, the rule does not fire, and we deny.
 3. **Violations are diagnostics only.** They explain a denial in the output; they
-   never feed into `allow`.
+   never feed into `allow`. (The policy also has a trail-level-attestation
+   diagnostics rule. The binding trail carries no trail-level attestations, so that
+   rule simply never fires here; it is harmless and left in place.)
 
-## Why one assertion on the trail-level flag is enough
+## Why one assertion on the binding trail's flag is enough
 
-Because the template is scoped per commit (see [doc 4](04-template-fragments.md)),
-`input.trail.compliance_status.is_compliant` already means: "every artifact this
-commit should have built, plus every trail-level attestation, is present and
-compliant". The suite proves the flag behaves that way against a fresh server:
+The whole-commit guarantee rests on two facts that compose:
 
-- it is `true` only when everything required is present and compliant
-  (`test/test_green_path_all_compliant.sh`,
-  `test/test_two_components_all_compliant.sh`), and
-- it is `false` when any in-scope attestation or artifact is missing or
-  non-compliant (`test/test_missing_artifact_attestation.sh`,
-  `test/test_in_scope_artifact_never_reported.sh`,
-  `test/test_failing_attestation.sh`,
-  `test/test_two_components_one_not_compliant.sh`).
+1. **The binding template is scoped per commit** (see
+   [doc 4](04-template-fragments.md)), so
+   `input.trail.compliance_status.is_compliant` for the `monorepo-co-deployment`
+   trail means "every artifact this commit should have built is present in the
+   binding trail". A commit that built only A and B expects only A and B; a
+   skipped C is not asked about.
+2. **A service attests its artifact into the binding trail only after passing its
+   own gate** (the assert-then-attest ordering in `a.yml`, see
+   [doc 3](03-ci-orchestration.md)). So an artifact being present in the binding
+   trail is not just "it built"; it is "it built and cleared its own SDLC
+   controls". The detailed evidence (lint, unit-test, pull-request) lives in that
+   service's own flow; the binding trail records the post-gate verdict as the
+   artifact's presence.
 
-A MISSING expected attestation is represented explicitly (`status: "MISSING"`)
-and drags the trail to not-compliant, so a component that was in scope but failed
-to attest cannot slip through.
+Together: the binding flag is `true` exactly when every in-scope service built and
+passed its own controls. A service that was in scope but failed, or never ran,
+leaves its expected artifact `MISSING` in the binding trail, so the flag is `false`
+and the gate denies. Fail-closed.
+
+The trust boundary is the assert-then-attest ordering. The gate does not
+re-verify each service's evidence; it relies on the workflow never attesting to
+the binding trail ahead of the service's own gate. A failed `kosli assert
+artifact` exits non-zero and stops the job before the binding attestation, so the
+only way to leak a false-compliant (attesting an ungated artifact) cannot occur
+through the workflow as written.
 
 ## Field shapes (confirmed against real data)
 
@@ -62,27 +75,37 @@ input.trail.compliance_status
                                           attestations_statuses: [ ... ] }, ... }
 ```
 
-Note `attestations_statuses` is an **array**; `artifacts_statuses` is a **map**
-keyed by artifact name.
+Note `attestations_statuses` is an **array** (empty for the binding trail);
+`artifacts_statuses` is a **map** keyed by artifact name. The binding gate's
+verdict turns entirely on the `artifacts_statuses` entries being present and
+compliant.
 
 ## Inspect the real input before trusting field paths
 
 ```
-kosli evaluate trail <TRAIL> \
-  --flow <FLOW> --org cyber-dojo --policy policy/gate.rego \
+kosli evaluate trail <SHA> \
+  --flow monorepo-co-deployment --org cyber-dojo --policy policy/gate.rego \
   --show-input --output json \
   | jq '.trail.compliance_status | {is_compliant, status, artifacts_statuses, attestations_statuses}'
 ```
 
-Run this against a known compliant trail and a known non-compliant one before
-relying on the policy in anger. (Confirm the exact flag spelling with
+Run this against a known compliant binding trail and a known non-compliant one
+before relying on the policy in anger. (Confirm the exact flag spelling with
 `kosli evaluate trail --help`.)
 
-## If you cannot scope the template per commit
+## Status of the proving tests
 
-Then the trail-level flag would be false whenever a component legitimately did not
-build, so you could not gate on it. The fallback is a params-scoped policy:
-pass the expected set in (`--params '{"expected":["A","B"]}'`) and positively
-prove each expected artifact is present and compliant, plus a separate positive
-check of the trail-level attestations array. It works but is strictly more
+The `test/*.sh` suite was written for the earlier single-shared-flow design and
+proves the gate against a trail that itself held all the attestations. The policy
+text is unchanged, but what the binding trail's `is_compliant` now aggregates
+(bare artifact presence rather than every attestation) is different, so the suite
+needs reworking to the two-tier model before it again end-to-end proves this gate.
+See [findings](findings.md).
+
+## If you cannot scope the binding template per commit
+
+Then the binding flag would be false whenever a component legitimately did not
+build, so you could not gate on it. The fallback is a params-scoped policy: pass
+the expected set in (`--params '{"expected":["A","B"]}'`) and positively prove
+each expected artifact is present and compliant. It works but is strictly more
 complex, which is why template scoping is the recommended path.
