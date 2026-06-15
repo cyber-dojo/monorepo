@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Tier 1 (per-service build flow). Proves the service's OWN gate -- `kosli assert
-# artifact` against the service flow -- PASSES (exit 0) when the service flow is
-# fully compliant. This is the positive control: only when this passes does a
-# service go on to attest its artifact into the binding trail (see the cross-tier
-# test). [docs/03 "what each component workflow does", docs/05]
+# Tier 1 (per-service build flow). Proves the per-service gate -- `kosli evaluate
+# trail --policy component.rego` against the service flow -- PASSES (exit 0) when
+# the service flow is fully compliant. This is the positive control: only when this
+# passes does the orchestrator bind the artifact into the binding trail (see the
+# cross-tier test). [docs/03 "the bind job", docs/05]
 set -Eeu
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "${here}/.." && pwd)"
@@ -48,15 +48,17 @@ assert_exit_zero "attest A.lint"
 kosli_cli attest junit --name A.unit-test --results-dir "${work}/reports" --flow "${flow}" --trail "${trail}" "${cgf[@]}"
 assert_exit_zero "attest A.unit-test"
 
-echo "## act -- read the service flow's view of A, then run the service's own gate"
+echo "## act -- read the service flow's view of A, then run the per-service gate"
 kosli_cli get trail "${trail}" --flow "${flow}" --output json
 assert_exit_zero "get trail --output json"
 a_ic="$(json '.compliance_status.artifacts_statuses.A.is_compliant')"
-echo "  OBSERVED A is_compliant in service flow = ${a_ic}"
+trail_ic="$(json '.compliance_status.is_compliant')"
+echo "  OBSERVED A is_compliant in service flow = ${a_ic} (trail=${trail_ic})"
 
-echo "## assert -- A compliant in its flow => the self-check gate exits 0"
+echo "## assert -- service flow compliant => the per-service gate exits 0"
 assert_equals "artifact A compliant in service flow" "${a_ic}" "true"
-kosli_cli assert artifact "${work}/A.bin" --artifact-type file --flow "${flow}"
-assert_exit_zero "kosli assert artifact (the service self-check) PASSES"
+assert_equals "service trail compliant" "${trail_ic}" "true"
+kosli_cli evaluate trail "${trail}" --flow "${flow}" --policy "${root}/policy/component.rego" --assert
+assert_exit_zero "kosli evaluate trail (the per-service gate) PASSES"
 
 finish

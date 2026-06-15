@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Tier 1 (per-service build flow). Characterises, against the CURRENT server, what
-# a MISSING trail-level attestation does to the service's own gate. A's artifact
-# and both its attestations (lint, unit-test) are present and compliant, but the
-# trail-level 'approval' is NEVER attested. On the current server a missing
-# trail-level attestation drags the ARTIFACT to non-compliant, so the service's
-# self-check (`kosli assert artifact`) DENIES. If a future server flips this, the
+# a MISSING trail-level attestation does to the per-service gate. A's artifact and
+# both its attestations (lint, unit-test) are present and compliant, but the
+# trail-level 'approval' is NEVER attested. A missing trail-level attestation makes
+# the trail non-compliant (and on the current server also drags the ARTIFACT to
+# non-compliant), so the per-service gate (`kosli evaluate trail --policy
+# component.rego`) DENIES. If a future server flips the artifact-dragging, the
 # pinned assert below catches it. [docs/findings, docs/06]
 set -Eeu
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -51,16 +52,18 @@ echo "## act"
 kosli_cli get trail "${trail}" --flow "${flow}" --output json
 assert_exit_zero "get trail --output json"
 a_ic="$(json '.compliance_status.artifacts_statuses.A.is_compliant')"
+trail_ic="$(json '.compliance_status.is_compliant')"
 approval_status="$(json '.compliance_status.attestations_statuses[]? | select(.attestation_name=="approval") | .status')"
 echo "  OBSERVED trail-level approval status = ${approval_status:-<absent>}"
-echo "  OBSERVED A is_compliant              = ${a_ic}"
+echo "  OBSERVED A is_compliant              = ${a_ic} (trail=${trail_ic})"
 
-echo "## assert -- missing trail-level attestation => artifact dragged non-compliant + self-check denies"
+echo "## assert -- missing trail-level attestation => trail non-compliant + per-service gate denies"
 assert_equals "trail-level approval reported MISSING" "${approval_status}" "MISSING"
+assert_equals "service trail NOT compliant" "${trail_ic}" "false"
 # Pinned characterisation: a MISSING trail-level attestation drags the ARTIFACT to
 # non-compliant even though A's own attestations all pass.
 assert_equals "artifact A dragged non-compliant by missing trail-level attestation" "${a_ic}" "false"
-kosli_cli assert artifact "${work}/A.bin" --artifact-type file --flow "${flow}"
-assert_exit_nonzero "kosli assert artifact (the service self-check) DENIES"
+kosli_cli evaluate trail "${trail}" --flow "${flow}" --policy "${root}/policy/component.rego" --assert
+assert_exit_nonzero "kosli evaluate trail (the per-service gate) DENIES"
 
 finish

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Tier 3 (cross-tier, the heart of the design). Proves the assert-then-attest
-# invariant end to end: a service attests its artifact into the binding trail ONLY
-# AFTER passing its own gate. A is fully compliant in its own flow, so its
-# self-check passes and it attests A into the binding trail. B is missing an
-# attestation in its own flow, so its self-check FAILS and -- mirroring the
-# ordering in b.yml (assert, then attest) -- B never attests into the binding
-# trail. The binding trail then has A present and B MISSING, so the whole-commit
-# gate DENIES. This is the trust boundary in docs/06: the binding gate never
-# re-verifies B's evidence; it relies on B not reaching the binding attestation.
+# Tier 3 (cross-tier, the heart of the design). Proves the evaluate-then-bind
+# invariant end to end: the orchestrator binds a service's artifact into the
+# binding trail ONLY AFTER the service passes its own gate. A is fully compliant in
+# its own flow, so its gate passes and A is bound into the binding trail. B is
+# missing an attestation in its own flow, so its gate FAILS and -- mirroring the
+# bind-X job (evaluate, then attest) -- B is never bound into the binding trail.
+# The binding trail then has A present and B MISSING, so the whole-commit gate
+# DENIES. This is the trust boundary in docs/06: the whole-commit gate never
+# re-verifies B's evidence; it relies on B never being bound.
 set -Eeu
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "${here}/.." && pwd)"
@@ -67,16 +67,18 @@ echo "## the binding flow for this commit"
 kosli_cli create flow "${binding}" --description "binding" --template-file "${work}/binding.yml"; assert_exit_zero "create binding flow"
 kosli_cli begin trail "${trail}" --flow "${binding}"; assert_exit_zero "begin binding trail"
 
-echo "## act -- each service runs its self-check, then attests to binding ONLY if it passed"
-kosli_cli assert artifact "${work}/A.bin" --artifact-type file --flow "${svca}"
-assert_exit_zero "A self-check PASSES"
+echo "## act -- the orchestrator gates each service flow, then binds ONLY if it passed"
+kosli_cli evaluate trail "${trail}" --flow "${svca}" --policy "${root}/policy/component.rego" --assert
+assert_exit_zero "A per-service gate PASSES"
 a_gate="${_status}"
-kosli_cli assert artifact "${work}/B.bin" --artifact-type file --flow "${svcb}"
-assert_exit_nonzero "B self-check FAILS"
+kosli_cli evaluate trail "${trail}" --flow "${svcb}" --policy "${root}/policy/component.rego" --assert
+assert_exit_nonzero "B per-service gate FAILS"
 b_gate="${_status}"
 
-# Mirror b.yml's assert-then-attest ordering: attest into the binding trail only on
-# a passing self-check. A passed (so it attests); B failed (so it never attests).
+# Mirror the bind-X job's evaluate-then-attest ordering: bind into the binding trail
+# only on a passing per-service gate. A passed (so it is bound); B failed (so it is
+# never bound). The orchestrator binds by --fingerprint; attesting the same file
+# here yields the identical artifact identity.
 if [ "${a_gate}" -eq 0 ]; then
   kosli_cli attest artifact "${work}/A.bin" --artifact-type file --name A --flow "${binding}" --trail "${trail}" "${agf[@]}"
   assert_exit_zero "A attests into binding trail (passed its gate)"

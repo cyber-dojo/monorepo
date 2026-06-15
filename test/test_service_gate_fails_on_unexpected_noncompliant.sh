@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Tier 1 (per-service build flow), asymmetry / fail-CLOSED. Proves an UNEXPECTED
 # attestation (one not declared in the service template) that is non-compliant
-# STILL makes the artifact non-compliant, so the service's own gate (`kosli assert
-# artifact`) DENIES. `unexpected: true` means "not required by the template", NOT
-# "ignored for compliance": a known-bad ad-hoc attestation cannot be sneaked past
-# the service gate (and so cannot reach the binding trail). [docs/02 `unexpected`]
+# STILL makes the service trail non-compliant, so the per-service gate (`kosli
+# evaluate trail --policy component.rego`) DENIES. `unexpected: true` means "not
+# required by the template", NOT "ignored for compliance": a known-bad ad-hoc
+# attestation cannot be sneaked past the service gate (and so cannot reach the
+# binding trail). [docs/02 `unexpected`]
 set -Eeu
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "${here}/.." && pwd)"
@@ -58,13 +59,15 @@ surprise_unexpected="$(json "${sel} | .unexpected")"
 surprise_ic="$(json "${sel} | .is_compliant")"
 echo "  OBSERVED A.surprise unexpected   = ${surprise_unexpected:-<absent>}"
 echo "  OBSERVED A.surprise is_compliant = ${surprise_ic:-<absent>}"
-echo "  OBSERVED A is_compliant          = ${a_ic}"
+trail_ic="$(json '.compliance_status.is_compliant')"
+echo "  OBSERVED A is_compliant          = ${a_ic} (trail=${trail_ic})"
 
-echo "## assert -- unexpected != ignored: a non-compliant unexpected attestation denies the self-check"
+echo "## assert -- unexpected != ignored: a non-compliant unexpected attestation denies the per-service gate"
 assert_equals "A.surprise flagged unexpected=true" "${surprise_unexpected}" "true"
 assert_equals "A.surprise is non-compliant"        "${surprise_ic}" "false"
 assert_equals "artifact A NOT compliant (unexpected evidence still counts)" "${a_ic}" "false"
-kosli_cli assert artifact "${work}/A.bin" --artifact-type file --flow "${flow}"
-assert_exit_nonzero "kosli assert artifact (the service self-check) DENIES"
+assert_equals "service trail NOT compliant" "${trail_ic}" "false"
+kosli_cli evaluate trail "${trail}" --flow "${flow}" --policy "${root}/policy/component.rego" --assert
+assert_exit_nonzero "kosli evaluate trail (the per-service gate) DENIES"
 
 finish

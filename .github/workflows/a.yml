@@ -2,9 +2,9 @@ name: A main
 
 on:
   workflow_call:
-    inputs:
-      kosli_trail: { required: true, type: string }
-      kosli_flow:  { required: true, type: string }
+    # A reports only to its own flow (monorepo-a). It no longer knows about the
+    # shared co-deployment flow: the orchestrator's bind-A job gates A on this
+    # flow and attests A's artifact into the co-deployment trail.
     outputs:
       image:
         description: "Ref of the artifact A built, for its deployment."
@@ -12,6 +12,9 @@ on:
       fingerprint:
         description: "SHA256 fingerprint of the artifact A built."
         value: ${{ jobs.build.outputs.fingerprint }}
+      flow:
+        description: "Kosli flow A reported to, for the orchestrator's bind gate."
+        value: ${{ jobs.build.outputs.flow }}
 
 env:
   KOSLI_HOST: ${{ vars.KOSLI_HOST }}
@@ -25,6 +28,7 @@ jobs:
     outputs:
       image:       ${{ steps.identity.outputs.image }}
       fingerprint: ${{ steps.identity.outputs.fingerprint }}
+      flow:        ${{ steps.identity.outputs.flow }}
     permissions:
       contents: read
       pull-requests: read
@@ -57,7 +61,7 @@ jobs:
       - name: Package artifact
         run: source/A/build.sh image
 
-      - name: Record built-artifact identity for deployment
+      - name: Record build outputs for the orchestrator (deploy + bind gate)
         id: identity
         run: |
           image="source/A/dist/A.tar"
@@ -65,6 +69,7 @@ jobs:
           {
             echo "image=${image}"
             echo "fingerprint=${fingerprint}"
+            echo "flow=${KOSLI_FLOW}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Report artifact A
@@ -81,22 +86,7 @@ jobs:
 
       - name: Attest A.lint
         run:
-          kosli attest generic 
-            --name A.lint 
-            --compliant=true 
+          kosli attest generic
+            --name A.lint
+            --compliant=true
             --user-data source/A/reports/lint.json
-
-      - name: A self-check
-        run:
-          kosli assert artifact source/A/dist/A.tar
-            --artifact-type file
-
-      # Only reached if the self-check above passed (a failed assert fails the
-      # job and stops here). Records A in this commit's co-deployment set.
-      - name: Attest artifact A to the shared co-deployment trail
-        run:
-          kosli attest artifact source/A/dist/A.tar
-            --artifact-type file
-            --name A
-            --flow "${{ inputs.kosli_flow }}"
-            --trail "${{ inputs.kosli_trail }}"
