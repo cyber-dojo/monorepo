@@ -24,10 +24,6 @@ Concretely:
 - A component that *should* have built but silently did not must make the commit
   non-compliant. Silence is never success.
 
-(The `test/*.sh` suite demonstrated these goals against the earlier
-single-shared-flow design and needs reworking to the current two-tier model; see
-[findings](findings.md).)
-
 ## The hard constraint: compliance is asymmetric
 
 This is the rule that shapes every later decision:

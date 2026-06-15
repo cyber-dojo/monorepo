@@ -78,9 +78,24 @@ jobs:
             --template-file scoped-template.yml
 
 
-  # One caller job per component, each guarded by the scope output. A matrix is
-  # NOT used here on purpose: A, B and C have genuinely different pipelines, so
-  # each gets its own reusable workflow.
+  # Each in-scope component is a build + bind PAIR, kept together so adding a
+  # service is a copy-paste of one pair with A renamed to the new component (plus a
+  # matching source/<X>/kosli.yml and the deploy job below). Both jobs are guarded
+  # by the same scope output.
+  #
+  # NOT a matrix: components have genuinely different build pipelines, and each bind
+  # needs its matching build job's outputs (flow, fingerprint), which a matrix leg
+  # cannot reach (same reason the deploy jobs are not a matrix).
+  #
+  # The bind is the load-bearing fail-safe: a component's bare artifact enters the
+  # shared co-deployment trail ONLY after the component passes its OWN flow's gate.
+  # The co-deployment gate below is presence-only and cannot re-derive a component's
+  # SDLC compliance, so the evaluate-->attest chain (`set -euo pipefail` plus
+  # ordering make the attest unreachable unless the evaluate --assert passed) is the
+  # sole guarantee that "artifact present on the shared trail" implies "component
+  # was fully compliant". A failed or skipped build skips its bind (default
+  # `needs`), so the artifact stays off the shared trail and the gate denies --
+  # fail-closed.
   build-A:
     needs: [setup, scope]
     if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
@@ -89,9 +104,29 @@ jobs:
       pull-requests: read
     uses: ./.github/workflows/a.yml
     secrets: inherit
-    with:
-      kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
-      kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
+
+  bind-A:
+    needs: [setup, scope, build-A]
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
+    runs-on: ubuntu-latest
+    env:
+      KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+    steps:
+      - uses: cyber-dojo/setup-kosli-cli@main
+      - uses: actions/checkout@v6
+      - name: Gate A on its own flow, then bind it into the co-deployment set
+        run: |
+          set -euo pipefail
+          kosli evaluate trail "${{ github.sha }}" \
+            --flow "${{ needs.build-A.outputs.flow }}" \
+            --policy policy/component.rego \
+            --assert
+          kosli attest artifact \
+            --fingerprint "${{ needs.build-A.outputs.fingerprint }}" \
+            --name A \
+            --flow "${{ needs.setup.outputs.kosli_flow }}" \
+            --trail "${{ needs.setup.outputs.kosli_trail }}"
+
 
   build-B:
     needs: [setup, scope]
@@ -101,9 +136,29 @@ jobs:
       pull-requests: read
     uses: ./.github/workflows/b.yml
     secrets: inherit
-    with:
-      kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
-      kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
+
+  bind-B:
+    needs: [setup, scope, build-B]
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'B') }}
+    runs-on: ubuntu-latest
+    env:
+      KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+    steps:
+      - uses: cyber-dojo/setup-kosli-cli@main
+      - uses: actions/checkout@v6
+      - name: Gate B on its own flow, then bind it into the co-deployment set
+        run: |
+          set -euo pipefail
+          kosli evaluate trail "${{ github.sha }}" \
+            --flow "${{ needs.build-B.outputs.flow }}" \
+            --policy policy/component.rego \
+            --assert
+          kosli attest artifact \
+            --fingerprint "${{ needs.build-B.outputs.fingerprint }}" \
+            --name B \
+            --flow "${{ needs.setup.outputs.kosli_flow }}" \
+            --trail "${{ needs.setup.outputs.kosli_trail }}"
+
 
   build-C:
     needs: [setup, scope]
@@ -113,15 +168,37 @@ jobs:
       pull-requests: read
     uses: ./.github/workflows/c.yml
     secrets: inherit
-    with:
-      kosli_flow: ${{ needs.setup.outputs.kosli_flow }}
-      kosli_trail: ${{ needs.setup.outputs.kosli_trail }}
+
+  bind-C:
+    needs: [setup, scope, build-C]
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'C') }}
+    runs-on: ubuntu-latest
+    env:
+      KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+    steps:
+      - uses: cyber-dojo/setup-kosli-cli@main
+      - uses: actions/checkout@v6
+      - name: Gate C on its own flow, then bind it into the co-deployment set
+        run: |
+          set -euo pipefail
+          kosli evaluate trail "${{ github.sha }}" \
+            --flow "${{ needs.build-C.outputs.flow }}" \
+            --policy policy/component.rego \
+            --assert
+          kosli attest artifact \
+            --fingerprint "${{ needs.build-C.outputs.fingerprint }}" \
+            --name C \
+            --flow "${{ needs.setup.outputs.kosli_flow }}" \
+            --trail "${{ needs.setup.outputs.kosli_trail }}"
 
   # The synchronization barrier is `needs` here, not anything in Kosli (Kosli has
-  # no wait/poll primitive). `!cancelled()` ensures a skipped or failed component
-  # never silently skips the gate -- the gate then judges the trail as it is.
+  # no wait/poll primitive). It waits on the bind jobs: every in-scope component
+  # has, by now, either bound its artifact into the shared trail (after passing
+  # its own gate) or failed/skipped doing so. `!cancelled()` ensures a skipped or
+  # failed bind never silently skips the gate -- the gate then judges the trail as
+  # it is, and a component missing from the co-deployment set drags it to deny.
   gate:
-    needs: [scope, build-A, build-B, build-C]
+    needs: [scope, bind-A, bind-B, bind-C]
     if: ${{ !cancelled() && needs.scope.outputs.components != '[]' }}
     runs-on: ubuntu-latest
     steps:

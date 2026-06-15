@@ -34,7 +34,9 @@ A `matrix` runs identical steps per value. A, B and C have genuinely different
 pipelines (different languages, tools, evidence), so a matrix is the wrong tool.
 Instead each component has its own reusable workflow (`on: workflow_call`), what
 would be its `main.yml` if it lived in its own repo. The orchestrator calls each
-one conditionally and passes the binding flow and trail in:
+one conditionally. The component reports only to its own flow and knows nothing of
+the binding flow; it returns its flow name, artifact ref and fingerprint as
+outputs for the orchestrator to gate and bind:
 
 ```yaml
 build-A:
@@ -42,11 +44,11 @@ build-A:
   if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
   permissions: { contents: read, pull-requests: read }
   uses: ./.github/workflows/a.yml
-  with:
-    kosli_flow:  ${{ needs.setup.outputs.kosli_flow }}   # monorepo-co-deployment
-    kosli_trail: ${{ needs.setup.outputs.kosli_trail }}  # the commit SHA
   secrets: inherit
 ```
+
+The component does not take the binding flow/trail as inputs; the orchestrator
+owns every write to the binding trail, in the bind job below.
 
 The `permissions` block is on the calling job, not workflow-wide: a job that
 calls a reusable workflow caps that workflow's `GITHUB_TOKEN`, and A's
@@ -55,36 +57,52 @@ callers leaves `scope`/`gate` at least privilege.
 
 ## What each component workflow does
 
-Each component workflow runs its own complete SDLC against its own flow, then
-contributes to the binding trail:
+Each component workflow runs its own complete SDLC against its own flow, and
+reports only there -- it does not know the binding flow exists:
 
 1. Opens its own trail: `kosli begin trail "${KOSLI_TRAIL}"` (the commit SHA) in
    its own flow (`KOSLI_FLOW: monorepo-a`), with its own template
    `source/A/kosli.yml`.
 2. Attests its own evidence into that flow: `pull-request`, the artifact `A`, and
    the artifact attestations (`A.lint`, `A.unit-test`).
-3. Runs its own gate: `kosli assert artifact source/A/dist/A.tar`. A non-compliant
-   artifact fails this step, which fails the job and stops it here.
-4. Only if that gate passed, attests its artifact into the shared trail:
-   `kosli attest artifact ... --name A --flow ${{ inputs.kosli_flow }} --trail
-   ${{ inputs.kosli_trail }}`. This is the one cross-flow write, and it records A
-   in this commit's co-deployment set.
+3. Returns its flow name, the artifact ref, and the artifact fingerprint as
+   workflow outputs, for the orchestrator to gate and bind.
+
+## The bind job
+
+For each in-scope component the orchestrator runs a `bind-<X>` job that gates the
+service and, only on success, records it in the co-deployment set:
+
+1. Gates the service's own flow: `kosli evaluate trail "$KOSLI_TRAIL" --flow
+   ${{ needs.build-A.outputs.flow }} --policy policy/component.rego --assert`. A
+   non-compliant service flow exits non-zero and stops the job here.
+2. Only if that gate passed, attests the artifact into the shared trail by
+   fingerprint: `kosli attest artifact --fingerprint
+   ${{ needs.build-A.outputs.fingerprint }} --name A --flow
+   ${{ needs.setup.outputs.kosli_flow }} --trail
+   ${{ needs.setup.outputs.kosli_trail }}`. This is the one write to the binding
+   trail, and it records A in this commit's co-deployment set.
+
+Both steps run in one `set -euo pipefail` block, so the attest is unreachable
+unless the evaluate `--assert` passed. The bind job lives next to its build job in
+`main.yml`, so adding a service is a copy-paste of one build+bind pair.
 
 Two consequences worth stating:
 
-- The assert-then-attest ordering is the whole tie-together mechanism. A service
-  that fails its own gate never reaches step 4, so its artifact stays MISSING in
-  the binding trail. There is no path by which a service contributes to the
-  binding set without having passed its controls.
-- The binding gate never reads the per-service flows. Components communicate to
-  the gate only through the binding trail, so fingerprints and verdicts never have
-  to be threaded back up through job outputs.
+- The evaluate-then-bind ordering is the whole tie-together mechanism. A service
+  that fails its own gate never reaches the bind attestation, so its artifact
+  stays MISSING in the binding trail. There is no path by which a service
+  contributes to the binding set without having passed its controls.
+- The whole-commit gate never reads the per-service flows. The bind job evaluates
+  each service flow once to decide whether to record it; the gate then judges only
+  the binding trail. The fingerprint is threaded from the build job's output into
+  its bind job; nothing else crosses between flows.
 
 ## The gate job
 
 ```yaml
 gate:
-  needs: [scope, build-A, build-B, build-C]
+  needs: [scope, bind-A, bind-B, bind-C]
   if: ${{ !cancelled() && needs.scope.outputs.components != '[]' }}
   run: kosli evaluate trail "$KOSLI_TRAIL" --policy policy/gate.rego --assert
         # KOSLI_FLOW: monorepo-co-deployment
@@ -92,12 +110,12 @@ gate:
 
 Two subtleties:
 
-- **`!cancelled()`** is essential. If `build-C` is skipped (C unchanged) or a
-  component fails, a plain `needs` would skip the gate. `!cancelled()` forces it
-  to run anyway, and it then judges the binding trail as it actually is. A skipped
-  C is fine because C is not in the binding template; a failed B never attests to
-  the binding trail, so B is MISSING there, the trail is non-compliant, and the
-  gate denies. Fail-closed.
+- **`!cancelled()`** is essential. If `build-C`/`bind-C` is skipped (C unchanged)
+  or a component fails, a plain `needs` would skip the gate. `!cancelled()` forces
+  it to run anyway, and it then judges the binding trail as it actually is. A
+  skipped C is fine because C is not in the binding template; a failed B never
+  gets bound into the binding trail, so B is MISSING there, the trail is
+  non-compliant, and the gate denies. Fail-closed.
 - The gate trusts the binding template plus the binding trail's attested reality.
   It never inspects which jobs happened to run, because that signal is not
   trustworthy (see [doc 6](06-safety-and-tradeoffs.md)).

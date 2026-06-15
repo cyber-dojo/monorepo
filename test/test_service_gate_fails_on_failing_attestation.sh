@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tier 1 (per-service build flow), asymmetry. Proves a present-but-FAILING
-# attestation (not just a missing one) makes the artifact non-compliant in the
-# service flow, so the service's own gate (`kosli assert artifact`) DENIES
+# attestation (not just a missing one) makes the service trail non-compliant, so
+# the per-service gate (`kosli evaluate trail --policy component.rego`) DENIES
 # (non-zero). Everything is attested, but A.lint is reported --compliant=false.
 # [docs/01 asymmetry, docs/05 positive proof of compliance]
 set -Eeu
@@ -50,14 +50,16 @@ echo "## act"
 kosli_cli get trail "${trail}" --flow "${flow}" --output json
 assert_exit_zero "get trail --output json"
 a_ic="$(json '.compliance_status.artifacts_statuses.A.is_compliant')"
+trail_ic="$(json '.compliance_status.is_compliant')"
 lint_ic="$(json '.compliance_status.artifacts_statuses.A.attestations_statuses[]? | select(.attestation_name=="lint") | .is_compliant')"
 echo "  OBSERVED A.lint is_compliant = ${lint_ic}"
-echo "  OBSERVED A is_compliant      = ${a_ic}"
+echo "  OBSERVED A is_compliant      = ${a_ic} (trail=${trail_ic})"
 
-echo "## assert -- a failing attestation => artifact non-compliant + self-check denies"
+echo "## assert -- a failing attestation => service trail non-compliant + per-service gate denies"
 assert_equals "A.lint reported non-compliant" "${lint_ic}" "false"
 assert_equals "artifact A NOT compliant" "${a_ic}" "false"
-kosli_cli assert artifact "${work}/A.bin" --artifact-type file --flow "${flow}"
-assert_exit_nonzero "kosli assert artifact (the service self-check) DENIES"
+assert_equals "service trail NOT compliant" "${trail_ic}" "false"
+kosli_cli evaluate trail "${trail}" --flow "${flow}" --policy "${root}/policy/component.rego" --assert
+assert_exit_nonzero "kosli evaluate trail (the per-service gate) DENIES"
 
 finish

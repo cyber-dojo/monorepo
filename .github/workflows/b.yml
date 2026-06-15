@@ -2,9 +2,9 @@ name: B main
 
 on:
   workflow_call:
-    inputs:
-      kosli_trail: { required: true, type: string }
-      kosli_flow:  { required: true, type: string }
+    # B reports only to its own flow (monorepo-b). It no longer knows about the
+    # shared co-deployment flow: the orchestrator's bind-B job gates B on this
+    # flow and attests B's artifact into the co-deployment trail.
     outputs:
       image:
         description: "Ref of the artifact B built, for its deployment."
@@ -12,6 +12,9 @@ on:
       fingerprint:
         description: "SHA256 fingerprint of the artifact B built."
         value: ${{ jobs.build.outputs.fingerprint }}
+      flow:
+        description: "Kosli flow B reported to, for the orchestrator's bind gate."
+        value: ${{ jobs.build.outputs.flow }}
 
 env:
   KOSLI_HOST: ${{ vars.KOSLI_HOST }}
@@ -25,6 +28,7 @@ jobs:
     outputs:
       image:       ${{ steps.identity.outputs.image }}
       fingerprint: ${{ steps.identity.outputs.fingerprint }}
+      flow:        ${{ steps.identity.outputs.flow }}
     permissions:
       contents: read
       pull-requests: read
@@ -57,7 +61,7 @@ jobs:
       - name: Package artifact
         run: source/B/build.sh image
 
-      - name: Record built-artifact identity for deployment
+      - name: Record build outputs for the orchestrator (deploy + bind gate)
         id: identity
         run: |
           image="source/B/dist/B.tar"
@@ -65,6 +69,7 @@ jobs:
           {
             echo "image=${image}"
             echo "fingerprint=${fingerprint}"
+            echo "flow=${KOSLI_FLOW}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Report artifact B
@@ -81,22 +86,7 @@ jobs:
 
       - name: Attest B.snyk-container-scan
         run:
-          kosli attest generic 
-            --name B.snyk-container-scan 
-            --compliant=true 
+          kosli attest generic
+            --name B.snyk-container-scan
+            --compliant=true
             --user-data source/B/reports/snyk.json
-
-      - name: B self-check
-        run:
-          kosli assert artifact source/B/dist/B.tar
-            --artifact-type file
-
-      # Only reached if the self-check above passed (a failed assert fails the
-      # job and stops here). Records B in this commit's co-deployment set.
-      - name: Attest artifact B to the shared co-deployment trail
-        run:
-          kosli attest artifact source/B/dist/B.tar
-            --artifact-type file
-            --name B
-            --flow "${{ inputs.kosli_flow }}"
-            --trail "${{ inputs.kosli_trail }}"

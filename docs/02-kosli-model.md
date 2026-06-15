@@ -26,22 +26,25 @@ another flow's compliance.
 (`source/<X>/kosli.yml`). On a commit that touches service A, A's reusable
 workflow opens a trail in `monorepo-a` and reports A's full SDLC evidence there:
 a trail-level `pull-request`, the artifact `A`, and the artifact's attestations
-(`A.lint`, `A.unit-test`). A finishes with its own gate, `kosli assert artifact`,
-against this flow. So everything that proves A is well-built lives in A's flow.
+(`A.lint`, `A.unit-test`). A's workflow does not gate itself; it returns its flow
+name, and the orchestrator applies A's gate later by evaluating this flow's trail
+(`kosli evaluate trail --flow monorepo-a --policy component.rego`, see
+[doc 3](03-ci-orchestration.md)). So everything that proves A is well-built lives
+in A's flow.
 
 **The co-deployment binding flow.** A separate flow, `monorepo-co-deployment`,
 records only the co-deployment set: which services were built on this commit and
 cleared their own gate. Its per-commit template lists one bare artifact per
-in-scope component, with no attestations. A service attests its artifact into
-this trail (`kosli attest artifact --name A --flow monorepo-co-deployment
---trail <sha>`) only after passing its own gate, so the presence of the artifact
-is the evidence. The whole-commit gate ([doc 5](05-the-gate-policy.md)) evaluates
-this one trail.
+in-scope component, with no attestations. The orchestrator's bind job attests a
+service's artifact into this trail (`kosli attest artifact --fingerprint <sha>
+--name A --flow monorepo-co-deployment --trail <sha>`) only after that service
+passes its own gate, so the presence of the artifact is the evidence. The
+whole-commit gate ([doc 5](05-the-gate-policy.md)) evaluates this one trail.
 
 The binding flow holds presence; the per-service flows hold the evidence. This
-works only because each service pushes its own post-gate verdict (the artifact
-attestation) into the binding trail. The binding gate never reads the per-service
-flows.
+works only because the orchestrator pushes each service's post-gate verdict (the
+artifact attestation) into the binding trail. The binding gate never reads the
+per-service flows.
 
 ## Per-trail template scoping (the key lever for the binding flow)
 
@@ -71,16 +74,15 @@ fresh local server with the real CLI:
 
 For the **binding** trail, whose template lists bare artifacts with no
 attestations, `is_compliant` reduces to "every in-scope artifact is present".
-Because a service only attests after its own gate, that is exactly "every in-scope
-service built and passed its own controls".
+Because the orchestrator only binds an artifact after the service passes its gate,
+that is exactly "every in-scope service built and passed its own controls".
 
-> Note on the test suite. The `test/*.sh` system tests were written against an
-> earlier single-shared-flow design (one `monorepo` flow holding a trail-level
-> `pull-request` plus every artifact's attestations). The Kosli-behaviour facts
-> above (MISSING semantics, the meaning of `is_compliant`, the array/map shapes)
-> still hold and are exercised by those tests. The end-to-end tie-together they
-> demonstrate, however, is the old topology's, so the suite needs reworking to the
-> two-tier model before it again proves this design. See [findings](findings.md).
+> Note on the test suite. The `test/*.sh` system tests exercise both tiers against
+> a fresh local server: the per-service gate (`kosli evaluate trail --flow
+> monorepo-<x> --policy component.rego`) and the whole-commit binding gate over
+> `monorepo-co-deployment`. The Kosli-behaviour facts above (MISSING semantics,
+> the meaning of `is_compliant`, the array/map shapes) underpin them. See
+> [findings](findings.md).
 
 These facts are why [the gate](05-the-gate-policy.md) can be a single positive
 assertion on the binding trail's flag, provided the binding template is scoped per

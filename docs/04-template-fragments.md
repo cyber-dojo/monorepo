@@ -14,10 +14,8 @@ are kept apart on purpose:
   emits the `monorepo-co-deployment` template for one commit: one bare artifact
   per in-scope component, no attestations. Nobody edits it by hand.
 
-(An earlier design kept a shared `kosli/trail.yml` skeleton holding common
-trail-level attestations and unioned the component fragments into one template.
-That file is gone: with per-service flows there is nothing common to share, and
-the binding template carries no attestations to merge.)
+There is nothing common to centralise: with per-service flows the services share
+no attestation, and the binding template carries none to merge.
 
 ## Why each service owns its own flow template
 
@@ -63,8 +61,8 @@ A component is detected as changed when ANY of these change:
   `source/X/kosli.yml`);
 - `.github/workflows/x.yml` (X's own reusable pipeline, named by the component
   lowercased, by convention); or
-- the shared orchestration files (`main.yml`, the `bin/` generators,
-  `policy/gate.rego`).
+- the shared orchestration files (`main.yml`, the `bin/` generators, and the
+  whole `policy/` directory -- `gate.rego` and the per-service `component.rego`).
 
 The pipeline file is watched because a change to *how* X is built and attested is
 just as build-relevant as a change to X's source: without it, editing `a.yml`
@@ -74,17 +72,19 @@ everything" below.
 
 Add a component D by creating `source/D/kosli.yml` and `source/D/...`; the
 filters and the binding-template composition pick it up with no other edits. (You
-still add a `build-D` caller job and a `d.yml` workflow, because GitHub Actions
-cannot enumerate jobs dynamically across reusable workflows.)
+still add a `build-D`+`bind-D` pair and a `deploy-D` job in `main.yml`, plus a
+`d.yml` workflow, because GitHub Actions cannot enumerate jobs dynamically across
+reusable workflows. The per-service gate policy `policy/component.rego` is shared,
+so D needs no new policy.)
 
 ## The contract with the component workflow
 
 Within a service's own flow, the template's attestation names are the interface.
 `source/A/kosli.yml` declares `lint` and `unit-test`; `a.yml` attests `A.lint` and
-`A.unit-test`. If they drift, the missing one shows up as `MISSING` and A's own
-gate (`kosli assert artifact`) denies. That is the safe direction: a naming
-mistake fails closed inside A's flow, so A never reaches the step that would
-attest A into the binding trail.
+`A.unit-test`. If they drift, the missing one shows up as `MISSING` and A's gate
+(`kosli evaluate trail --flow monorepo-a --policy component.rego`) denies. That is
+the safe direction: a naming mistake fails closed inside A's flow, so the bind job
+never records A in the binding trail.
 
 Across to the binding flow, the interface is just the artifact name. A attests
 `--name A` into `monorepo-co-deployment`, and the generated binding template
@@ -93,10 +93,11 @@ the binding trail, which the whole-commit gate denies.
 
 ## Global edits rebuild everything
 
-A change to a shared orchestration file (`main.yml`, the `bin/` generators, or
-`policy/gate.rego`) changes how *every* component is built or evaluated.
-`bin/gen-filters` therefore includes those paths in every component's filter, so
-editing any one of them puts all components in scope and rebuilds them.
+A change to a shared orchestration file (`main.yml`, the `bin/` generators, or any
+file under `policy/` -- both `gate.rego` and the per-service `component.rego`)
+changes how *every* component is built or evaluated. `bin/gen-filters` therefore
+includes those paths in every component's filter, so editing any one of them puts
+all components in scope and rebuilds them.
 
 This is the safe direction. A global orchestration or policy change that silently
 rebuilt nothing could leave the commit reporting compliant against rules the

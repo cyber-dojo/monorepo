@@ -16,16 +16,18 @@ So the generated template is just one bare artifact entry per CHANGED component:
         - name: B
 
 There are deliberately NO trail-level attestations (e.g. pull-request now lives
-in each service's own flow) and NO per-artifact attestations here. A service
-attests its artifact to this trail (`kosli attest artifact --name A --flow ...`)
-only AFTER passing its own self-check, so the mere presence of the artifact is
-the evidence. An in-scope component that was expected but never attested shows up
-as MISSING and drags the trail non-compliant, which is exactly what the gate
-(`kosli evaluate trail`) keys on. So the trail's compliance covers exactly what
-this commit should have built -- never more, and (crucially) never less.
+in each service's own flow) and NO per-artifact attestations here. The
+orchestrator's per-component `bind` job attests a service's artifact to this
+trail (`kosli attest artifact --name A --flow ...`) only AFTER that service
+passes its own flow's gate (`kosli evaluate trail --flow monorepo-a --assert`),
+so the mere presence of the artifact is the evidence. An in-scope component that
+was expected but never attested shows up as MISSING and drags the trail
+non-compliant, which is exactly what the gate (`kosli evaluate trail`) keys on.
+So the trail's compliance covers exactly what this commit should have built --
+never more, and (crucially) never less.
 
 The artifact names are the component names passed in; they match the `--name`
-each service attests with. Each named component must have a
+the orchestrator binds with. Each named component must have a
 `source/<name>/kosli.yml` (the same file `bin/gen-filters` and the `scope` job
 key on); a name without one is a typo or drift and fails loud here rather than
 silently dropping the component from the co-deployment set.

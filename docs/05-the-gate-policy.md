@@ -4,6 +4,13 @@
 against the `monorepo-co-deployment` trail. It turns that one binding trail into a
 single allow/deny verdict for the whole commit.
 
+Its sibling `policy/component.rego` is the per-service gate, evaluated by each
+`bind-<X>` job against that service's own flow (`monorepo-a`, ...) before the
+service is recorded in the binding trail. The two policies are structurally
+identical -- both default-deny and assert the trail's `is_compliant` flag is
+exactly `true` -- and differ only in which trail they judge. Everything below
+about `gate.rego`'s rules applies equally to `component.rego`.
+
 ## The policy
 
 ```rego
@@ -44,10 +51,10 @@ The whole-commit guarantee rests on two facts that compose:
    trail means "every artifact this commit should have built is present in the
    binding trail". A commit that built only A and B expects only A and B; a
    skipped C is not asked about.
-2. **A service attests its artifact into the binding trail only after passing its
-   own gate** (the assert-then-attest ordering in `a.yml`, see
-   [doc 3](03-ci-orchestration.md)). So an artifact being present in the binding
-   trail is not just "it built"; it is "it built and cleared its own SDLC
+2. **The orchestrator binds an artifact into the binding trail only after the
+   service passes its own gate** (the evaluate-then-bind ordering in the `bind-<X>`
+   job, see [doc 3](03-ci-orchestration.md)). So an artifact being present in the
+   binding trail is not just "it built"; it is "it built and cleared its own SDLC
    controls". The detailed evidence (lint, unit-test, pull-request) lives in that
    service's own flow; the binding trail records the post-gate verdict as the
    artifact's presence.
@@ -57,11 +64,12 @@ passed its own controls. A service that was in scope but failed, or never ran,
 leaves its expected artifact `MISSING` in the binding trail, so the flag is `false`
 and the gate denies. Fail-closed.
 
-The trust boundary is the assert-then-attest ordering. The gate does not
-re-verify each service's evidence; it relies on the workflow never attesting to
-the binding trail ahead of the service's own gate. A failed `kosli assert
-artifact` exits non-zero and stops the job before the binding attestation, so the
-only way to leak a false-compliant (attesting an ungated artifact) cannot occur
+The trust boundary is the evaluate-then-bind ordering. The whole-commit gate does
+not re-verify each service's evidence; it relies on the bind job never attesting
+to the binding trail ahead of the service's own gate. A failed `kosli evaluate
+trail --flow monorepo-a --policy component.rego --assert` exits non-zero and (under
+`set -euo pipefail`) stops the bind job before the binding attestation, so the
+only way to leak a false-compliant (binding an ungated artifact) cannot occur
 through the workflow as written.
 
 ## Field shapes (confirmed against real data)
@@ -95,12 +103,13 @@ before relying on the policy in anger. (Confirm the exact flag spelling with
 
 ## Status of the proving tests
 
-The `test/*.sh` suite was written for the earlier single-shared-flow design and
-proves the gate against a trail that itself held all the attestations. The policy
-text is unchanged, but what the binding trail's `is_compliant` now aggregates
-(bare artifact presence rather than every attestation) is different, so the suite
-needs reworking to the two-tier model before it again end-to-end proves this gate.
-See [findings](findings.md).
+The `test/*.sh` suite exercises both policies against a fresh local server: the
+per-service gate (`component.rego` over each `monorepo-<x>` flow) in the Tier-1
+`test_service_gate_*` tests, and the whole-commit gate (`gate.rego` over the
+binding trail) in the Tier-2 `test_binding_gate_*` tests. The Tier-3
+`test_failed_service_gate_keeps_artifact_out_of_binding.sh` proves the
+evaluate-then-bind boundary end to end. The suite needs a local Kosli server to
+run (`test/run.sh`); see [findings](findings.md).
 
 ## If you cannot scope the binding template per commit
 

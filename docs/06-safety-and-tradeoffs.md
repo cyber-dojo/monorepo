@@ -20,37 +20,38 @@ run.
 
 ## How the gate tells "B ran but failed" from "C did not run"
 
-It does not look at the per-service flows to decide this, and it must not. The
-distinction lives in the binding template plus the assert-then-attest ordering:
+The whole-commit gate does not look at the per-service flows to decide this, and
+it must not. The distinction lives in the binding template plus the
+evaluate-then-bind ordering:
 
 - C is **not in the binding template** (C unchanged), so the gate never asks about
   C.
 - B **is in the binding template**. B is compliant in the binding trail only if
   its artifact is present, and B's artifact is present only if B passed its own
-  gate and reached its binding attestation. If B failed its gate it never attests,
-  so B is `MISSING` in the binding trail and the gate denies. If B never ran at
-  all, same outcome.
+  gate and the bind job recorded it. If B failed its gate the bind job never
+  attests, so B is `MISSING` in the binding trail and the gate denies. If B never
+  ran at all, same outcome.
 
 "B ran but failed" and "B never reported" both leave B `MISSING` in the binding
 trail, which is the correct outcome for anything in scope. The gate needs no way
 to tell them apart.
 
-## The trust boundary: assert before attest
+## The trust boundary: evaluate before bind
 
-The binding gate does not re-verify each service's evidence. It trusts that a
-service writes its artifact into the binding trail only after passing its own gate.
-That invariant is the assert-then-attest step ordering in each component workflow
-(`kosli assert artifact`, then `kosli attest artifact --flow
-monorepo-co-deployment`). A failed assert exits non-zero and stops the job before
-the binding attestation.
+The whole-commit gate does not re-verify each service's evidence. It trusts that
+the orchestrator binds a service's artifact into the binding trail only after that
+service passes its own gate. That invariant is the evaluate-then-bind step
+ordering in each `bind-<X>` job (`kosli evaluate trail --flow monorepo-<x>
+--policy component.rego --assert`, then `kosli attest artifact --flow
+monorepo-co-deployment`). A failed evaluate `--assert` exits non-zero and, under
+`set -euo pipefail`, stops the bind job before the binding attestation.
 
-This is the one place a false-compliant could be introduced: a workflow that
-attested to the binding trail *before*, or *regardless of*, its own gate would
-contribute an ungated artifact. So that ordering is a load-bearing invariant, not
-a stylistic choice. Anything that reorders or unguards the binding attestation
-breaks the asymmetry. A useful future safeguard would be a CI check that the
-binding attestation step always follows the self-check in every component
-workflow.
+This is the one place a false-compliant could be introduced: a bind job that
+attested to the binding trail *before*, or *regardless of*, its evaluate gate
+would contribute an ungated artifact. So that ordering is a load-bearing
+invariant, not a stylistic choice. Anything that reorders or unguards the binding
+attestation breaks the asymmetry. A useful future safeguard would be a CI check
+that the binding attestation always follows the evaluate gate in every bind job.
 
 ## Bias the scope toward over-inclusion
 
@@ -77,8 +78,9 @@ post-gate verdict is collected.
 - The Rego defaults to deny and proves compliance positively, so a renamed/absent
   field denies rather than passes. (Source-level argument only; not system-tested,
   since proving it needs a fabricated policy input, which the tests forbid.)
-- A failed self-check in a component's own flow stops the job before its binding
-  attestation, so the component stays `MISSING` in the binding trail.
+- A failed per-service gate (`kosli evaluate trail --policy component.rego`) stops
+  the bind job before its binding attestation, so the component stays `MISSING` in
+  the binding trail.
 - A naming drift between a fragment and its workflow surfaces as `MISSING` and
   fails closed: inside the service's own flow it trips that service's gate; on the
   artifact name it leaves the binding artifact `MISSING`.
@@ -98,15 +100,15 @@ the real CLI, that the design depends on regardless of topology:
 
 ## Coverage gaps and pending rework
 
-- **The `test/*.sh` suite predates the two-tier rework.** It proves the
-  Kosli-behaviour facts above and the *old* single-shared-flow tie-together. It
-  does not yet exercise per-service flows, the assert-then-attest ordering, or the
-  binding-trail gate. It needs reworking before it again end-to-end proves this
-  design. See [findings](findings.md).
+- **The `test/*.sh` suite covers the two tiers at the CLI level**, but not the CI
+  wiring. It exercises the per-service gate (`component.rego`), the binding gate
+  (`gate.rego`), and the evaluate-then-bind boundary end to end against a fresh
+  local server. What it does NOT cover is the GitHub Actions orchestration that
+  sequences these calls. See [findings](findings.md).
 - CI orchestration (doc 3): `needs`, `if: !cancelled()`, conditional dispatch, the
   always-on scope job, scope-from-an-oracle, over-inclusion, and the
-  assert-before-attest ordering are GitHub Actions semantics and would need an
-  Actions-level harness (e.g. `act`).
+  evaluate-before-bind step ordering (`set -euo pipefail`) are GitHub Actions
+  semantics and would need an Actions-level harness (e.g. `act`).
 - The Rego "renamed/absent field -> deny" fail-safe is only demonstrable with a
   fabricated policy input, which our tests forbid, so it stays a source-level
   argument (the policy's `== true` structure).

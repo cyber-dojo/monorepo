@@ -79,8 +79,7 @@ Useful knobs found:
 ## RESOLVED: artifact compliance when a trail-level attestation is MISSING
 
 Settled by `test/test_service_gate_fails_when_trail_attestation_missing.sh`
-(renamed from `test_artifact_compliance_when_trail_attestation_missing.sh` in the
-two-tier rework) against a fresh local server (CLI 2.24.2, 2026-06-11):
+against a fresh local server (CLI 2.24.2, 2026-06-11):
 
 With artifact A *fully* attested (`A.lint` + `A.unit-test` both present and
 compliant) but the trail-level `pull-request` MISSING:
@@ -99,24 +98,24 @@ The test now pins the current behaviour so a future change is caught.
 
 ## Verified by the system-test suite (claim -> proving test)
 
-The suite is the two-tier set (reworked 2026-06-15; see the topology entry below).
-All against a fresh local server; each row is asserted, not assumed. Whole suite
-green on CLI 2.24.2, 2026-06-15: 9 system tests (96 checks) + 2 server-free script
-tests (31 checks), 0 failed.
+The suite is the two-tier set. All against a fresh local server; each row is
+asserted, not assumed. Whole suite green on CLI 2.24.2: 9 system tests + 2
+server-free script tests, 0 failed.
 
-Tier 1 -- per-service build flow, gated by the service's own `kosli assert
-artifact` (the self-check in a.yml/b.yml/c.yml):
+Tier 1 -- per-service build flow, gated by `kosli evaluate trail --flow
+monorepo-<x> --policy policy/component.rego --assert` (run by the orchestrator's
+`bind-<X>` job):
 
-- Self-check PASSES only when the service flow is genuinely compliant (positive
-  control) -> `test/test_service_gate_passes_when_compliant.sh`
-- A missing artifact-level attestation -> artifact non-compliant + self-check
+- The per-service gate PASSES only when the service flow is genuinely compliant
+  (positive control) -> `test/test_service_gate_passes_when_compliant.sh`
+- A missing artifact-level attestation -> trail non-compliant + per-service gate
   denies -> `test/test_service_gate_fails_on_missing_attestation.sh`
 - A present-but-failing attestation (`--compliant=false`) -> non-compliant +
-  self-check denies -> `test/test_service_gate_fails_on_failing_attestation.sh`
-- A missing trail-level attestation drags the artifact non-compliant + self-check
-  denies -> `test/test_service_gate_fails_when_trail_attestation_missing.sh`
+  per-service gate denies -> `test/test_service_gate_fails_on_failing_attestation.sh`
+- A missing trail-level attestation drags the artifact non-compliant + per-service
+  gate denies -> `test/test_service_gate_fails_when_trail_attestation_missing.sh`
 - An UNEXPECTED attestation (not in the template) that is non-compliant STILL
-  makes the artifact non-compliant and denies the self-check. "Unexpected" means
+  makes the trail non-compliant and denies the per-service gate. "Unexpected" means
   "not required", NOT "ignored": a known-bad ad-hoc attestation cannot be sneaked
   past the service gate. (A *compliant* unexpected attestation -- e.g. historical
   provenance/sbom -- does not affect compliance.) ->
@@ -135,12 +134,13 @@ Tier 2 -- binding trail (monorepo-co-deployment), gated by `kosli evaluate trail
 - A binding trail scoped to a subset is compliant on its own (a commit that built
   only A expects only A) -> `test/test_binding_gate_allows_scoped_subset.sh`
 
-Tier 3 -- the cross-tier assert-then-attest invariant:
+Tier 3 -- the cross-tier evaluate-then-bind invariant:
 
-- A service attests its artifact into the binding trail ONLY after passing its own
-  gate. A passes and attests; B fails and never attests, so B is MISSING in the
-  binding trail and the whole-commit gate denies. This is the docs/06 trust
-  boundary, proved end to end ->
+- The orchestrator binds a service's artifact into the binding trail ONLY after
+  the service passes its own gate. A is compliant so its gate passes and A is
+  bound; B is non-compliant so its gate denies and B is never bound, so B is
+  MISSING in the binding trail and the whole-commit gate denies. This is the
+  docs/06 trust boundary, proved end to end ->
   `test/test_failed_service_gate_keeps_artifact_out_of_binding.sh`
 
 Server-free generator tests (no server needed):
@@ -149,42 +149,12 @@ Server-free generator tests (no server needed):
   `test/scripts/test_scoped_template.sh`
 - `bin/gen-filters` derives each component's filter from its fragment file: it
   watches `source/X/**`, the component's own workflow `.github/workflows/x.yml`,
-  and the shared orchestration paths (no longer the removed `kosli/trail.yml`) ->
-  `test/scripts/test_gen_filters.sh`
+  and the shared orchestration paths (`main.yml`, the `bin/` generators, and the
+  whole `policy/**` directory) -> `test/scripts/test_gen_filters.sh`
 
-## Topology change: single shared flow -> per-service flows + a binding flow (2026-06-15)
+## Bare-artifact compliance (binding trail)
 
-The design moved from one shared `monorepo` flow (every component a named
-artifact in one per-commit trail) to two tiers of flow:
-
-- per-service build flows `monorepo-a` / `-b` / `-c`, each holding that service's
-  full SDLC evidence (`pull-request`, the artifact, its attestations) and its own
-  gate (`kosli assert artifact`); template `source/<X>/kosli.yml`; and
-- a binding flow `monorepo-co-deployment` whose per-commit trail records only the
-  co-deployment set: one bare artifact per in-scope component, no attestations. A
-  service attests its artifact there only after passing its own gate. The
-  whole-commit gate (`kosli evaluate trail --flow monorepo-co-deployment`) keys on
-  that one trail. This is the doc-07 "Topology B".
-
-What this meant for the suite:
-
-- The Kosli-behaviour facts (MISSING is explicit not absent; `is_compliant`
-  meaning; array/map shapes; unexpected-attestation handling;
-  `--assert`/`--build-url`/per-command flag quirks; the git-repo reliance) are
-  unchanged and still hold.
-- The suite was reworked to the two-tier model the same day (the section above is
-  the new mapping). The old single-shared-flow tests
-  (`test_green_path_all_compliant.sh`, `test_missing_artifact_attestation.sh`,
-  `test_in_scope_artifact_never_reported.sh`, `test_failing_attestation.sh`,
-  `test_two_components_all_compliant.sh`, `test_two_components_one_not_compliant.sh`,
-  `test_artifact_compliance_when_trail_attestation_missing.sh`,
-  `test_unexpected_attestation.sh`) were replaced by Tier-1 per-service tests,
-  Tier-2 binding-trail tests, and a Tier-3 cross-tier test, all green.
-- Newly proven by the rework and not provable under the single-flow design: a BARE
-  artifact (no required attestations) is compliant once present, so the binding
-  trail's `is_compliant` reduces to "every in-scope artifact present"; and the
-  assert-then-attest ordering keeps a failed service's artifact out of the binding
-  trail (Tier-3).
-- `bin/scoped-template` now emits the binding template (bare artifacts from the
-  component names), not a union of the fragments;
-  `test/scripts/test_scoped_template.sh` was updated to match.
+A bare artifact -- one declared in a template with no required attestations -- is
+compliant as soon as it is present. So the binding trail's `is_compliant` reduces
+to "every in-scope artifact is present", which is what the whole-commit gate keys
+on. Verified by the Tier-2 binding tests.
