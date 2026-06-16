@@ -31,9 +31,7 @@ jobs:
       kosli_flow:  ${{ steps.vars.outputs.kosli_flow }}
       kosli_trail: ${{ steps.vars.outputs.kosli_trail }}
     steps:
-      - uses: kosli-dev/setup-cli-action@v5
-        with:
-          version: ${{ vars.KOSLI_CLI_VERSION }}
+      - uses: cyber-dojo/setup-kosli-cli@main
 
       - name: Create flow
         env:
