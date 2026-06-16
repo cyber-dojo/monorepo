@@ -3,6 +3,10 @@
 These documents explain the design in this directory and, more importantly, *why*
 each decision was made. They build on each other; read in order.
 
+> **Component names.** These docs use the short labels `A`, `B`, and `C` for the
+> three example components. In the code they are named `web`, `dashboard`, and
+> `creator` respectively: `A` = `web`, `B` = `dashboard`, `C` = `creator`.
+
 1. [Problem and goals](01-problem-and-goals.md) -- what we are trying to achieve
    and the hard constraint (compliance asymmetry) that shapes everything.
 2. [The Kosli model we rely on](02-kosli-model.md) -- trails, the two tiers of
@@ -30,20 +34,24 @@ push
  |
  v
 [scope]  always runs; diff -> changed set; compose binding template;
- |  \        \         begin the monorepo-co-deployment trail
- |   \        \-- (C unchanged: build-C and bind-C skipped)
- |    \
- v     v
-[build-A] [build-B]   each: its own reusable workflow; runs its full SDLC in its
- |        |           own flow (monorepo-a/-b) and returns its flow + fingerprint
- v        v
-[bind-A]  [bind-B]    each: kosli evaluate trail --flow monorepo-a --policy
- |        |           component.rego --assert; then -- only if that passed --
- |        |           attests the artifact (by fingerprint) into the shared
- |        |           monorepo-co-deployment trail
- \        /
-  \      /
-   v    v
-  [gate]  needs all binds; if: !cancelled();
-          kosli evaluate trail --flow monorepo-co-deployment --policy gate.rego
+ |       begin the monorepo-co-deployment trail
+ |       (creator unchanged: build-creator and bind-creator skipped)
+ |
+ +------------+
+ |            |
+ v            v
+[build-web]   [build-dashboard]   each: its own reusable workflow; runs its full
+ |            |                   SDLC in its own flow (monorepo-web/-dashboard)
+ |            |                   and returns its flow + fingerprint
+ v            v
+[bind-web]    [bind-dashboard]    each: kosli evaluate trail --flow monorepo-web
+ |            |                   --policy component.rego --assert; then -- only
+ |            |                   if that passed -- attests the artifact (by
+ |            |                   fingerprint) into the shared
+ |            |                   monorepo-co-deployment trail
+ +------------+
+ |
+ v
+[gate]  needs all binds; if: !cancelled();
+        kosli evaluate trail --flow monorepo-co-deployment --policy gate.rego
 ```

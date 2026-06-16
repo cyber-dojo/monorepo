@@ -34,9 +34,9 @@ is compliant, and if any one of them fails, nothing is deployed.
 |-- .github/
 |   `-- workflows/
 |       |-- main.yml               orchestrator: scope -> per-component build+bind -> gate -> per-component deploy
-|       |-- a.yml                  component A's reusable build pipeline (its own Kosli flow)
-|       |-- b.yml                  component B's reusable build pipeline (its own Kosli flow)
-|       |-- c.yml                  component C's reusable build pipeline (its own Kosli flow)
+|       |-- web.yml                  component A's reusable build pipeline (its own Kosli flow)
+|       |-- dashboard.yml                  component B's reusable build pipeline (its own Kosli flow)
+|       |-- creator.yml                  component C's reusable build pipeline (its own Kosli flow)
 |       `-- deploy.yml             shared reusable deploy workflow, called once per rebuilt artifact
 `-- docs/                          the full design and the reasons for it
 ```
@@ -44,7 +44,7 @@ is compliant, and if any one of them fails, nothing is deployed.
 ## The one-paragraph version
 
 There are two tiers of Kosli flow. Each component builds in its **own** flow
-(`monorepo-a`, `monorepo-b`, `monorepo-c`), where it attests its full evidence
+(`monorepo-web`, `monorepo-dashboard`, `monorepo-creator`), where it attests its full evidence
 (pull-request, the artifact, its tests and lint). A second **binding** flow,
 `monorepo-co-deployment`, records only the co-deployment set for the commit.
 

@@ -2,7 +2,7 @@
 """Compose the monorepo-co-deployment flow template, scoped to this commit.
 
 The `monorepo-co-deployment` flow does NOT re-run any service's SDLC controls.
-Those live in each service's own flow (`monorepo-a`, `monorepo-b`, ...), defined
+Those live in each service's own flow (`monorepo-web`, `monorepo-dashboard`, ...), defined
 in `source/<name>/kosli.yml` and opened by that service's reusable workflow. This
 flow records ONLY the co-deployment set: which component artifacts were built and
 cleared their own gate on this commit.
@@ -12,14 +12,14 @@ So the generated template is just one bare artifact entry per CHANGED component:
     version: 1
     trail:
       artifacts:
-        - name: A
-        - name: B
+        - name: web
+        - name: dashboard
 
 There are deliberately NO trail-level attestations (e.g. pull-request now lives
 in each service's own flow) and NO per-artifact attestations here. The
 orchestrator's per-component `bind` job attests a service's artifact to this
-trail (`kosli attest artifact --name A --flow ...`) only AFTER that service
-passes its own flow's gate (`kosli evaluate trail --flow monorepo-a --assert`),
+trail (`kosli attest artifact --name web --flow ...`) only AFTER that service
+passes its own flow's gate (`kosli evaluate trail --flow monorepo-web --assert`),
 so the mere presence of the artifact is the evidence. An in-scope component that
 was expected but never attested shows up as MISSING and drags the trail
 non-compliant, which is exactly what the gate (`kosli evaluate trail`) keys on.
@@ -33,15 +33,15 @@ key on); a name without one is a typo or drift and fails loud here rather than
 silently dropping the component from the co-deployment set.
 
 Usage:
-  bin/scoped-template '["A","B"]'
-  bin/scoped-template --repo-root . '["A","B"]'
+  bin/scoped-template '["web","dashboard"]'
+  bin/scoped-template --repo-root . '["web","dashboard"]'
 
 Options:
   -h, --help       Show this help and exit.
   --repo-root DIR  Repo root containing source/ (default: current dir).
 
 Example:
-  bin/scoped-template '["A","B"]' > scoped-template.yml
+  bin/scoped-template '["web","dashboard"]' > scoped-template.yml
 """
 import argparse
 import json
@@ -80,7 +80,7 @@ def parse_args(argv):
     )
     parser.add_argument(
         "changed",
-        help='JSON array of changed component names, e.g. \'["A","B"]\'.',
+        help='JSON array of changed component names, e.g. \'["web","dashboard"]\'.',
     )
     return parser.parse_args(argv)
 
