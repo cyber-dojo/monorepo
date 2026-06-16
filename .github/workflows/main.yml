@@ -31,6 +31,8 @@ jobs:
       kosli_flow:  ${{ steps.vars.outputs.kosli_flow }}
       kosli_trail: ${{ steps.vars.outputs.kosli_trail }}
     steps:
+      - uses: cyber-dojo/setup-kosli-cli@main
+
       - name: Create flow
         run:
           kosli create flow "${KOSLI_FLOW}"
