@@ -5,7 +5,7 @@ against the `monorepo-co-deployment` trail. It turns that one binding trail into
 single allow/deny verdict for the whole commit.
 
 Its sibling `policy/component.rego` is the per-service gate, evaluated by each
-`bind-<X>` job against that service's own flow (`monorepo-a`, ...) before the
+`bind-<X>` job against that service's own flow (`monorepo-web`, ...) before the
 service is recorded in the binding trail. The two policies are structurally
 identical -- both default-deny and assert the trail's `is_compliant` flag is
 exactly `true` -- and differ only in which trail they judge. Everything below
@@ -67,7 +67,7 @@ and the gate denies. Fail-closed.
 The trust boundary is the evaluate-then-bind ordering. The whole-commit gate does
 not re-verify each service's evidence; it relies on the bind job never attesting
 to the binding trail ahead of the service's own gate. A failed `kosli evaluate
-trail --flow monorepo-a --policy component.rego --assert` exits non-zero and (under
+trail --flow monorepo-web --policy component.rego --assert` exits non-zero and (under
 `set -euo pipefail`) stops the bind job before the binding attestation, so the
 only way to leak a false-compliant (binding an ungated artifact) cannot occur
 through the workflow as written.

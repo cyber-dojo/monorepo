@@ -1,9 +1,9 @@
 name: deploy
 
 # Shared, parameterized deployment workflow. main.yml calls it once per rebuilt
-# component (deploy-A/B/C), after the whole-commit gate has passed. The artifact
+# component (deploy-web/dashboard/creator), after the whole-commit gate has passed. The artifact
 # to deploy is identified entirely by the image ref + fingerprint that the
-# building workflow (a.yml/b.yml/c.yml) returned as outputs, so this workflow does
+# building workflow (web.yml/dashboard.yml/creator.yml) returned as outputs, so this workflow does
 # not need to know which component it is.
 on:
   workflow_call:

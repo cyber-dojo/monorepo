@@ -16,24 +16,24 @@ printf '%s\n' "${out}" | sed 's/^/  filters: /'
 
 line_for() { printf '%s\n' "${out}" | grep "^$1:"; }
 
-a="$(line_for A)"
-assert_contains     "A watches its source tree"        "${a}" "source/A/**"
-assert_contains     "A watches its own workflow"       "${a}" ".github/workflows/a.yml"
-assert_not_contains "A does not watch B's workflow"    "${a}" "workflows/b.yml"
-assert_contains     "A watches shared orchestrator"    "${a}" ".github/workflows/main.yml"
-assert_contains     "A watches shared gen-filters"     "${a}" "bin/gen-filters"
-assert_contains     "A watches shared scoped-template" "${a}" "bin/scoped-template"
-assert_contains     "A watches the shared policy dir"  "${a}" "policy/**"
-assert_not_contains "A no longer watches removed trail skeleton" "${a}" "kosli/trail.yml"
+web="$(line_for web)"
+assert_contains     "web watches its source tree"        "${web}" "source/web/**"
+assert_contains     "web watches its own workflow"       "${web}" ".github/workflows/web.yml"
+assert_not_contains "web does not watch dashboard's workflow" "${web}" "workflows/dashboard.yml"
+assert_contains     "web watches shared orchestrator"    "${web}" ".github/workflows/main.yml"
+assert_contains     "web watches shared gen-filters"     "${web}" "bin/gen-filters"
+assert_contains     "web watches shared scoped-template" "${web}" "bin/scoped-template"
+assert_contains     "web watches the shared policy dir"  "${web}" "policy/**"
+assert_not_contains "web no longer watches removed trail skeleton" "${web}" "kosli/trail.yml"
 
-b="$(line_for B)"
-assert_contains "B watches its source tree"  "${b}" "source/B/**"
-assert_contains "B watches its own workflow" "${b}" ".github/workflows/b.yml"
-assert_contains "B watches the shared policy dir" "${b}" "policy/**"
+dashboard="$(line_for dashboard)"
+assert_contains "dashboard watches its source tree"  "${dashboard}" "source/dashboard/**"
+assert_contains "dashboard watches its own workflow" "${dashboard}" ".github/workflows/dashboard.yml"
+assert_contains "dashboard watches the shared policy dir" "${dashboard}" "policy/**"
 
-c="$(line_for C)"
-assert_contains "C watches its source tree"  "${c}" "source/C/**"
-assert_contains "C watches its own workflow" "${c}" ".github/workflows/c.yml"
-assert_contains "C watches the shared policy dir" "${c}" "policy/**"
+creator="$(line_for creator)"
+assert_contains "creator watches its source tree"  "${creator}" "source/creator/**"
+assert_contains "creator watches its own workflow" "${creator}" ".github/workflows/creator.yml"
+assert_contains "creator watches the shared policy dir" "${creator}" "policy/**"
 
 finish

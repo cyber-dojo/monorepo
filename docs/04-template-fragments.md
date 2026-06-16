@@ -6,7 +6,7 @@ There is no central Kosli template file. Two kinds of template exist, and they
 are kept apart on purpose:
 
 - **Each service owns its full flow template** in `source/<X>/kosli.yml`. This
-  is the template for that service's own flow (`monorepo-a`, ...). It declares
+  is the template for that service's own flow (`monorepo-web`, ...). It declares
   the service's trail-level attestation(s) (`pull-request`), its artifact (`A`),
   and that artifact's attestations (`A.lint`, `A.unit-test`). The service's own
   reusable workflow opens its trail with this file.
@@ -22,7 +22,7 @@ no attestation, and the binding template carries none to merge.
 A, B and C have genuinely different toolchains and evidence, and there is no
 attestation common to all three. Giving each its own flow template keeps each
 service's required evidence defined exactly once, in that service's own file,
-under that service's own path (`source/A/**`). Editing A's attestations touches
+under that service's own path (`source/web/**`). Editing A's attestations touches
 only A.
 
 ## Why the binding template is generated
@@ -65,7 +65,7 @@ A component is detected as changed when ANY of these change:
   whole `policy/` directory -- `gate.rego` and the per-service `component.rego`).
 
 The pipeline file is watched because a change to *how* X is built and attested is
-just as build-relevant as a change to X's source: without it, editing `a.yml`
+just as build-relevant as a change to X's source: without it, editing `web.yml`
 would silently skip A's build. The shared files are watched by every component so
 that an orchestration change rebuilds all components, see "Global edits rebuild
 everything" below.
@@ -80,9 +80,9 @@ so D needs no new policy.)
 ## The contract with the component workflow
 
 Within a service's own flow, the template's attestation names are the interface.
-`source/A/kosli.yml` declares `lint` and `unit-test`; `a.yml` attests `A.lint` and
+`source/web/kosli.yml` declares `lint` and `unit-test`; `web.yml` attests `A.lint` and
 `A.unit-test`. If they drift, the missing one shows up as `MISSING` and A's gate
-(`kosli evaluate trail --flow monorepo-a --policy component.rego`) denies. That is
+(`kosli evaluate trail --flow monorepo-web --policy component.rego`) denies. That is
 the safe direction: a naming mistake fails closed inside A's flow, so the bind job
 never records A in the binding trail.
 

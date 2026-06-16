@@ -4,7 +4,7 @@ trail:
   attestations:
     - { name: pull-request, type: pull_request }
   artifacts:
-    - name: B
+    - name: dashboard
       attestations:
         - { name: rubocop,             type: junit }
         - { name: snyk-container-scan, type: generic }

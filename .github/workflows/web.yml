@@ -1,25 +1,25 @@
-name: B main
+name: web main
 
 on:
   workflow_call:
-    # B reports only to its own flow (monorepo-b). It no longer knows about the
-    # shared co-deployment flow: the orchestrator's bind-B job gates B on this
-    # flow and attests B's artifact into the co-deployment trail.
+    # web reports only to its own flow (monorepo-web). It no longer knows about the
+    # shared co-deployment flow: the orchestrator's bind-web job gates web on this
+    # flow and attests web's artifact into the co-deployment trail.
     outputs:
       image:
-        description: "Ref of the artifact B built, for its deployment."
+        description: "Ref of the artifact web built, for its deployment."
         value: ${{ jobs.build.outputs.image }}
       fingerprint:
-        description: "SHA256 fingerprint of the artifact B built."
+        description: "SHA256 fingerprint of the artifact web built."
         value: ${{ jobs.build.outputs.fingerprint }}
       flow:
-        description: "Kosli flow B reported to, for the orchestrator's bind gate."
+        description: "Kosli flow web reported to, for the orchestrator's bind gate."
         value: ${{ jobs.build.outputs.flow }}
 
 env:
   KOSLI_HOST: ${{ vars.KOSLI_HOST }}
   KOSLI_ORG:  ${{ vars.KOSLI_ORG }}
-  KOSLI_FLOW: monorepo-b
+  KOSLI_FLOW: monorepo-web
   KOSLI_TRAIL: ${{ github.sha }}
 
 jobs:
@@ -38,10 +38,11 @@ jobs:
       - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v6
 
-      - name: Begin trail
-        run:
-          kosli begin trail "${KOSLI_TRAIL}"
-            --template-file source/B/kosli.yml
+      - name: Begin Kosli Trail
+        uses: cyber-dojo/kosli-begin-trail@main
+        with:
+          flow_description: "UX for practicing TDD"
+          template_filename: source/web/kosli.yml
 
       - name: Attest pull-request evidence to the trail
         run:
@@ -50,43 +51,43 @@ jobs:
             --name pull-request
 
       - name: Build
-        run: source/B/build.sh build
+        run: source/web/build.sh build
 
-      - name: Rubocop
-        run: source/B/build.sh rubocop
+      - name: Unit test
+        run: source/web/build.sh unit-test
 
-      - name: Snyk container scan
-        run: source/B/build.sh snyk-scan
+      - name: Lint
+        run: source/web/build.sh lint
 
       - name: Package artifact
-        run: source/B/build.sh image
+        run: source/web/build.sh image
 
       - name: Record build outputs for the orchestrator (deploy + bind gate)
         id: identity
         run: |
-          image="source/B/dist/B.tar"
-          fingerprint="$(kosli fingerprint --artifact-type file source/B/dist/B.tar)"
+          image="source/web/dist/web.tar"
+          fingerprint="$(kosli fingerprint --artifact-type file source/web/dist/web.tar)"
           {
             echo "image=${image}"
             echo "fingerprint=${fingerprint}"
             echo "flow=${KOSLI_FLOW}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Report artifact B
+      - name: Report artifact web
         run:
-          kosli attest artifact source/B/dist/B.tar
+          kosli attest artifact source/web/dist/web.tar 
             --artifact-type file
-            --name B
+            --name web
 
-      - name: Attest B.rubocop
+      - name: Attest web.unit-test
         run:
           kosli attest junit
-            --name B.rubocop
-            --results-dir source/B/reports
+            --name web.unit-test
+            --results-dir source/web/reports
 
-      - name: Attest B.snyk-container-scan
+      - name: Attest web.lint
         run:
           kosli attest generic
-            --name B.snyk-container-scan
+            --name web.lint
             --compliant=true
-            --user-data source/B/reports/snyk.json
+            --user-data source/web/reports/lint.json

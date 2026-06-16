@@ -6,7 +6,7 @@ https://docs.kosli.com/)
 ## Flow, trail, artifact, attestation
 
 - A **flow** models a process. Here we use one flow per service for that
-  service's build (`monorepo-a`, `monorepo-b`, `monorepo-c`), plus one extra flow
+  service's build (`monorepo-web`, `monorepo-dashboard`, `monorepo-creator`), plus one extra flow
   (`monorepo-co-deployment`) that binds a commit's services together.
 - A **trail** is one execution of a flow. We key every trail on the commit SHA,
   so each service's build trail and the co-deployment trail for the same commit
@@ -24,11 +24,11 @@ another flow's compliance.
 
 **Per-service build flows.** Each service has its own flow and its own template
 (`source/<X>/kosli.yml`). On a commit that touches service A, A's reusable
-workflow opens a trail in `monorepo-a` and reports A's full SDLC evidence there:
+workflow opens a trail in `monorepo-web` and reports A's full SDLC evidence there:
 a trail-level `pull-request`, the artifact `A`, and the artifact's attestations
 (`A.lint`, `A.unit-test`). A's workflow does not gate itself; it returns its flow
 name, and the orchestrator applies A's gate later by evaluating this flow's trail
-(`kosli evaluate trail --flow monorepo-a --policy component.rego`, see
+(`kosli evaluate trail --flow monorepo-web --policy component.rego`, see
 [doc 3](03-ci-orchestration.md)). So everything that proves A is well-built lives
 in A's flow.
 

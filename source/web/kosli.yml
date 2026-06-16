@@ -4,6 +4,7 @@ trail:
   attestations:
     - { name: pull-request, type: pull_request }
   artifacts:
-    - name: C
+    - name: web
       attestations:
+        - { name: lint,      type: generic }
         - { name: unit-test, type: junit }

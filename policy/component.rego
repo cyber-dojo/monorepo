@@ -1,7 +1,7 @@
 # Per-component gate for the monorepo.
 #
 # Evaluated by `kosli evaluate trail --assert` in the orchestrator's per-component
-# `bind` job, against a single service's own flow (monorepo-a, monorepo-b, ...).
+# `bind` job, against a single service's own flow (monorepo-web, monorepo-dashboard, ...).
 # It is the load-bearing check: a component's bare artifact is attested into the
 # shared co-deployment trail ONLY after this policy passes on its own flow. The
 # co-deployment gate (policy/gate.rego) is presence-only and CANNOT re-derive a

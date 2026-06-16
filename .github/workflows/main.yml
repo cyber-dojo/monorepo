@@ -31,6 +31,16 @@ jobs:
       kosli_flow:  ${{ steps.vars.outputs.kosli_flow }}
       kosli_trail: ${{ steps.vars.outputs.kosli_trail }}
     steps:
+      - uses: cyber-dojo/setup-kosli-cli@main
+
+      - name: Create flow
+        env:
+          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+        run:
+          kosli create flow "${KOSLI_FLOW}"
+          --description="Bind shared commit deployments"
+          --use-empty-template
+
       - name: Prepare outputs for workflow jobs
         id: vars
         run: |
@@ -79,7 +89,7 @@ jobs:
 
 
   # Each in-scope component is a build + bind PAIR, kept together so adding a
-  # service is a copy-paste of one pair with A renamed to the new component (plus a
+  # service is a copy-paste of one pair with web renamed to the new component (plus a
   # matching source/<X>/kosli.yml and the deploy job below). Both jobs are guarded
   # by the same scope output.
   #
@@ -96,98 +106,98 @@ jobs:
   # was fully compliant". A failed or skipped build skips its bind (default
   # `needs`), so the artifact stays off the shared trail and the gate denies --
   # fail-closed.
-  build-A:
+  build-web:
     needs: [setup, scope]
-    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'web') }}
     permissions:
       contents: read
       pull-requests: read
-    uses: ./.github/workflows/a.yml
+    uses: ./.github/workflows/web.yml
     secrets: inherit
 
-  bind-A:
-    needs: [setup, scope, build-A]
-    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
+  bind-web:
+    needs: [setup, scope, build-web]
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'web') }}
     runs-on: ubuntu-latest
     env:
       KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v6
-      - name: Gate A on its own flow, then bind it into the co-deployment set
+      - name: Gate web on its own flow, then bind it into the co-deployment set
         run: |
           set -euo pipefail
           kosli evaluate trail "${{ github.sha }}" \
-            --flow "${{ needs.build-A.outputs.flow }}" \
+            --flow "${{ needs.build-web.outputs.flow }}" \
             --policy policy/component.rego \
             --assert
-          kosli attest artifact "${{ needs.build-A.outputs.image }}" \
-            --fingerprint "${{ needs.build-A.outputs.fingerprint }}" \
-            --name A \
+          kosli attest artifact "${{ needs.build-web.outputs.image }}" \
+            --fingerprint "${{ needs.build-web.outputs.fingerprint }}" \
+            --name web \
             --flow "${{ needs.setup.outputs.kosli_flow }}" \
             --trail "${{ needs.setup.outputs.kosli_trail }}"
 
 
-  build-B:
+  build-dashboard:
     needs: [setup, scope]
-    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'B') }}
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'dashboard') }}
     permissions:
       contents: read
       pull-requests: read
-    uses: ./.github/workflows/b.yml
+    uses: ./.github/workflows/dashboard.yml
     secrets: inherit
 
-  bind-B:
-    needs: [setup, scope, build-B]
-    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'B') }}
+  bind-dashboard:
+    needs: [setup, scope, build-dashboard]
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'dashboard') }}
     runs-on: ubuntu-latest
     env:
       KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v6
-      - name: Gate B on its own flow, then bind it into the co-deployment set
+      - name: Gate dashboard on its own flow, then bind it into the co-deployment set
         run: |
           set -euo pipefail
           kosli evaluate trail "${{ github.sha }}" \
-            --flow "${{ needs.build-B.outputs.flow }}" \
+            --flow "${{ needs.build-dashboard.outputs.flow }}" \
             --policy policy/component.rego \
             --assert
-          kosli attest artifact "${{ needs.build-B.outputs.image }}" \
-            --fingerprint "${{ needs.build-B.outputs.fingerprint }}" \
-            --name B \
+          kosli attest artifact "${{ needs.build-dashboard.outputs.image }}" \
+            --fingerprint "${{ needs.build-dashboard.outputs.fingerprint }}" \
+            --name dashboard \
             --flow "${{ needs.setup.outputs.kosli_flow }}" \
             --trail "${{ needs.setup.outputs.kosli_trail }}"
 
 
-  build-C:
+  build-creator:
     needs: [setup, scope]
-    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'C') }}
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'creator') }}
     permissions:
       contents: read
       pull-requests: read
-    uses: ./.github/workflows/c.yml
+    uses: ./.github/workflows/creator.yml
     secrets: inherit
 
-  bind-C:
-    needs: [setup, scope, build-C]
-    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'C') }}
+  bind-creator:
+    needs: [setup, scope, build-creator]
+    if: ${{ contains(fromJSON(needs.scope.outputs.components), 'creator') }}
     runs-on: ubuntu-latest
     env:
       KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v6
-      - name: Gate C on its own flow, then bind it into the co-deployment set
+      - name: Gate creator on its own flow, then bind it into the co-deployment set
         run: |
           set -euo pipefail
           kosli evaluate trail "${{ github.sha }}" \
-            --flow "${{ needs.build-C.outputs.flow }}" \
+            --flow "${{ needs.build-creator.outputs.flow }}" \
             --policy policy/component.rego \
             --assert
-          kosli attest artifact "${{ needs.build-C.outputs.image }}" \
-            --fingerprint "${{ needs.build-C.outputs.fingerprint }}" \
-            --name C \
+          kosli attest artifact "${{ needs.build-creator.outputs.image }}" \
+            --fingerprint "${{ needs.build-creator.outputs.fingerprint }}" \
+            --name creator \
             --flow "${{ needs.setup.outputs.kosli_flow }}" \
             --trail "${{ needs.setup.outputs.kosli_trail }}"
 
@@ -198,14 +208,14 @@ jobs:
   # failed bind never silently skips the gate -- the gate then judges the trail as
   # it is, and a component missing from the co-deployment set drags it to deny.
   gate:
-    needs: [scope, bind-A, bind-B, bind-C]
+    needs: [scope, bind-web, bind-dashboard, bind-creator]
     if: ${{ !cancelled() && needs.scope.outputs.components != '[]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: cyber-dojo/setup-kosli-cli@main
       - uses: actions/checkout@v6
 
-      - name: Tie A/B/C compliance together for this commit
+      - name: Tie web/dashboard/creator compliance together for this commit
         env:
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
         run:
@@ -220,27 +230,27 @@ jobs:
   # its build ran AND the whole-commit gate passed -- an out-of-scope component
   # skips its build (so its deploy skips via `needs`), and a denied gate fails the
   # gate job (so every deploy skips). Co-deployment is all-or-nothing per commit.
-  deploy-A:
-    needs: [build-A, gate]
+  deploy-web:
+    needs: [build-web, gate]
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
     with:
-      image:       ${{ needs.build-A.outputs.image }}
-      fingerprint: ${{ needs.build-A.outputs.fingerprint }}
+      image:       ${{ needs.build-web.outputs.image }}
+      fingerprint: ${{ needs.build-web.outputs.fingerprint }}
 
-  deploy-B:
-    needs: [build-B, gate]
+  deploy-dashboard:
+    needs: [build-dashboard, gate]
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
     with:
-      image:       ${{ needs.build-B.outputs.image }}
-      fingerprint: ${{ needs.build-B.outputs.fingerprint }}
+      image:       ${{ needs.build-dashboard.outputs.image }}
+      fingerprint: ${{ needs.build-dashboard.outputs.fingerprint }}
 
-  deploy-C:
-    needs: [build-C, gate]
+  deploy-creator:
+    needs: [build-creator, gate]
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
     with:
-      image:       ${{ needs.build-C.outputs.image }}
-      fingerprint: ${{ needs.build-C.outputs.fingerprint }}
+      image:       ${{ needs.build-creator.outputs.image }}
+      fingerprint: ${{ needs.build-creator.outputs.fingerprint }}
 

@@ -1,7 +1,7 @@
 # 3. CI orchestration
 
 The CI is in `.github/workflows/`: an orchestrator (`main.yml`) and one reusable
-workflow per component (`a.yml`, `b.yml`, `c.yml`).
+workflow per component (`web.yml`, `dashboard.yml`, `creator.yml`).
 
 ## Why the barrier lives in CI, not Kosli
 
@@ -43,7 +43,7 @@ build-A:
   needs: [setup, scope]
   if: ${{ contains(fromJSON(needs.scope.outputs.components), 'A') }}
   permissions: { contents: read, pull-requests: read }
-  uses: ./.github/workflows/a.yml
+  uses: ./.github/workflows/web.yml
   secrets: inherit
 ```
 
@@ -61,8 +61,8 @@ Each component workflow runs its own complete SDLC against its own flow, and
 reports only there -- it does not know the binding flow exists:
 
 1. Opens its own trail: `kosli begin trail "${KOSLI_TRAIL}"` (the commit SHA) in
-   its own flow (`KOSLI_FLOW: monorepo-a`), with its own template
-   `source/A/kosli.yml`.
+   its own flow (`KOSLI_FLOW: monorepo-web`), with its own template
+   `source/web/kosli.yml`.
 2. Attests its own evidence into that flow: `pull-request`, the artifact `A`, and
    the artifact attestations (`A.lint`, `A.unit-test`).
 3. Returns its flow name, the artifact ref, and the artifact fingerprint as
