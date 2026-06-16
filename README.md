@@ -3,8 +3,8 @@
 A self-contained demonstration of how to tie the Kosli compliance of several
 monorepo components together for a single commit, when each component has its
 own bespoke CI pipeline and its own attestations, and only the components that
-changed are built. The components (A, B, C) are deterministic stand-ins, not
-real cyber-dojo services; they exist only to make the wiring runnable. Deployment
+changed are built. The components (creator, dashboard, web) are deterministic stand-ins, 
+not real cyber-dojo services; they exist only to make the wiring runnable. Deployment
 is all-or-nothing: every changed component is deployed only if the whole commit
 is compliant, and if any one of them fails, nothing is deployed.
 
@@ -13,16 +13,16 @@ is compliant, and if any one of them fails, nothing is deployed.
 ```
 .
 |-- source/                        each component: source + build.sh + its own flow template kosli.yml
-|   |-- A/
-|   |   |-- app.py
+|   |-- creatpr/
+|   |   |-- main.go
 |   |   |-- build.sh
 |   |   `-- kosli.yml
-|   |-- B/
+|   |-- dashboard/
 |   |   |-- app.rb
 |   |   |-- build.sh
 |   |   `-- kosli.yml
-|   `-- C/
-|       |-- main.go
+|   `-- web/
+|       |-- app.py
 |       |-- build.sh
 |       `-- kosli.yml
 |-- bin/
